@@ -1,6 +1,6 @@
 {
-  "name": "Gestion des Heures",
-  "short_name": "Gestion des Heures",
+  "name": "MH Gestion des Heures",
+  "short_name": "MH Gestion des Heures",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1F3864",
