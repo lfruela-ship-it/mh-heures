@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gestion des Heures">
+<meta name="theme-color" content="#1F3864">
+<link rel="manifest" href="manifest.json">
+<title>Gestion des Heures</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1F3864;--blue:#2E5F9E;--orange:#E8532B;
+  --green:#2D9A5F;--red:#E63946;--amber:#F5A623;
+  --bg:#F0F2F5;--card:#fff;--text:#1A1A2E;--muted:#6B7280;--border:#E2E8F0;
+  --radius:14px;--shadow:0 2px 14px rgba(31,56,100,.11);
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100dvh}
+
+/* ── LANG PICKER ── */
+#lang-bar{position:absolute;top:14px;right:14px;display:flex;gap:6px;z-index:1100}
+.lang-btn{border:none;background:rgba(255,255,255,.5);color:var(--navy);
+  border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;
+  transition:.15s;letter-spacing:.3px}
+.lang-btn:active,.lang-btn.active{background:var(--orange);color:#fff}
+
+/* ── PIN ── */
+#screen-pin{position:fixed;inset:0;z-index:1000;background:#D6E4F0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+.pin-logo{width:min(200px,55vw);max-width:55%;margin-bottom:16px;}
+
+.pin-title{font-size:22px;font-weight:300;color:var(--navy);margin-bottom:22px;text-align:center}
+.pin-dots{display:flex;gap:14px;margin-bottom:24px}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid rgba(31,56,100,.25);transition:.15s}
+.pin-dot.filled{background:var(--orange);border-color:var(--orange)}
+.pin-grid{display:grid;grid-template-columns:repeat(3,68px);gap:10px;margin-bottom:12px}
+.pin-key{height:68px;border-radius:50%;border:none;background:rgba(255,255,255,.6);color:var(--navy);
+  font-size:22px;font-weight:300;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;transition:.15s;line-height:1}
+.pin-key sub{font-size:7px;letter-spacing:1px;color:#9E9E9E;font-weight:600}
+.pin-key:active{background:rgba(255,255,255,.9);transform:scale(.92)}
+.pin-key.del{background:transparent;font-size:18px}
+.pin-key.gear{background:rgba(255,255,255,.4);font-size:16px}
+.pin-error{color:var(--orange);font-size:12px;font-weight:600;text-align:center;min-height:16px;margin-top:2px}
+
+/* ── ADMIN ── */
+#screen-admin{position:fixed;inset:0;z-index:999;background:#fff;
+  display:none;flex-direction:column;overflow-y:auto;padding:48px 20px 40px}
+.admin-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:3px}
+.admin-sub{font-size:11px;color:var(--muted);margin-bottom:20px}
+.admin-card{background:#F7FBFF;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.admin-card-title{font-size:10px;font-weight:700;letter-spacing:.8px;
+  color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+.admin-lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);
+  margin-bottom:4px;margin-top:10px}
+.admin-lbl:first-child{margin-top:0}
+.admin-inp{width:100%;height:46px;background:#fff;
+  border:1.5px solid var(--border);border-radius:10px;padding:0 14px;
+  font-size:16px;color:var(--text);outline:none;-webkit-appearance:none}
+.admin-inp:focus{border-color:var(--blue)}
+.admin-inp.pin-inp{letter-spacing:4px;font-size:20px;text-align:center;font-weight:700}
+.btn-admin-add{width:100%;height:46px;border-radius:10px;border:none;
+  background:var(--orange);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
+.emp-row{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border)}
+.emp-row:last-child{border-bottom:none}
+.emp-name{font-size:13px;font-weight:600;color:var(--text)}
+.emp-pin{font-size:10px;color:var(--muted);margin-top:2px}
+.btn-del-emp{background:rgba(230,57,70,.2);border:none;color:var(--red);
+  border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+.btn-admin-back{width:100%;height:46px;border-radius:10px;
+  border:1.5px solid var(--border);background:transparent;
+  color:var(--navy);font-size:14px;font-weight:600;cursor:pointer;margin-top:6px}
+.admin-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
+
+/* ── APP ── */
+#app{display:none;flex-direction:column;height:100dvh}
+.app-header{background:#fff;color:var(--text);padding:10px 16px 8px;flex-shrink:0;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.header-emp{font-size:12px;font-weight:700;color:var(--navy)}
+.header-right{display:flex;gap:6px;align-items:center}
+.btn-logout{background:var(--bg);border:none;color:var(--navy);
+  border-radius:8px;padding:5px 11px;font-size:10px;font-weight:700;cursor:pointer}
+.btn-lang-sm{background:var(--bg);border:none;color:var(--navy);
+  border-radius:8px;padding:5px 8px;font-size:10px;font-weight:700;cursor:pointer}
+.clock{font-size:30px;font-weight:300;letter-spacing:2px;
+  font-variant-numeric:tabular-nums;text-align:center;color:var(--navy)}
+.clock-date{font-size:11px;text-align:center;color:var(--muted);margin-top:1px}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+  padding:12px 14px 86px}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);
+  border-top:1px solid var(--border);display:flex;
+  padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 12px rgba(0,0,0,.07);z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:10px 4px 8px;border:none;background:transparent;
+  color:var(--muted);font-size:10px;font-weight:600;letter-spacing:.2px;cursor:pointer;gap:3px}
+.nav-btn.active{color:var(--blue)}
+.nav-btn svg{width:21px;height:21px}
+.view{display:none}.view.active{display:block}
+
+/* ── LANG MODAL ── */
+#lang-modal{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);
+  display:none;align-items:flex-end;justify-content:center;padding:0 0 20px}
+#lang-modal.open{display:flex}
+.lang-sheet{background:var(--card);border-radius:20px 20px 14px 14px;
+  width:100%;max-width:420px;padding:20px 16px 10px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+.lang-sheet-title{font-size:13px;font-weight:700;color:var(--muted);
+  text-align:center;margin-bottom:14px;text-transform:uppercase;letter-spacing:.6px}
+.lang-option{display:flex;align-items:center;gap:14px;padding:13px 12px;
+  border-radius:12px;cursor:pointer;transition:.15s;margin-bottom:4px}
+.lang-option:active,.lang-option.sel{background:var(--bg)}
+.lang-option.sel .lang-flag{box-shadow:0 0 0 2px var(--blue)}
+.lang-flag{font-size:26px;width:36px;text-align:center;flex-shrink:0}
+.lang-name{font-size:15px;font-weight:600;color:var(--text)}
+.lang-native{font-size:12px;color:var(--muted)}
+.lang-check{margin-left:auto;color:var(--blue);font-size:18px;opacity:0}
+.lang-option.sel .lang-check{opacity:1}
+
+/* ── FORMS ── */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:15px;margin-bottom:12px}
+.card-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.7px;color:var(--muted);margin-bottom:11px}
+.field{margin-bottom:13px}.field:last-child{margin-bottom:0}
+label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px}
+select,input[type="time"],input[type="date"]{width:100%;height:46px;
+  border:1.5px solid var(--border);border-radius:10px;padding:0 13px;
+  font-size:16px;font-family:inherit;color:var(--text);background:#fff;
+  -webkit-appearance:none;outline:none;transition:border-color .2s;
+  font-variant-numeric:tabular-nums}
+select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,93,158,.1)}
+textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:11px 13px;font-size:15px;font-family:inherit;resize:none;
+  outline:none;color:var(--text);height:66px;transition:border-color .2s}
+textarea:focus{border-color:var(--blue)}
+
+/* ── HOURS RESULT ── */
+.h-result{background:linear-gradient(135deg,var(--navy),var(--blue));
+  border-radius:12px;padding:16px;text-align:center;color:#fff;margin-bottom:12px}
+.h-result .val{font-size:42px;font-weight:300;font-variant-numeric:tabular-nums;
+  letter-spacing:2px;line-height:1}
+.h-result .unit{font-size:11px;opacity:.65;margin-top:4px}
+
+/* ── TIME PERIODS ── */
+.periode-row{display:grid;grid-template-columns:1fr 16px 1fr 42px;
+  gap:5px;align-items:center;margin-bottom:7px}
+.sep{font-size:14px;color:var(--muted);text-align:center;font-weight:300}
+.btn-now{height:46px;border:none;border-radius:10px;background:var(--navy);
+  color:#fff;font-size:9px;font-weight:700;cursor:pointer;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 3px;transition:.15s}
+.btn-now:active{background:var(--blue);transform:scale(.94)}
+.btn-now svg{width:13px;height:13px}
+
+/* ── CODE CHIPS ── */
+.code-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.code-chip{height:42px;border:2px solid var(--border);border-radius:10px;
+  background:#fff;font-size:12px;font-weight:700;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  line-height:1.1;transition:.15s;color:var(--text)}
+.code-chip span{font-size:8px;font-weight:600;color:var(--muted)}
+.code-chip.active{border-color:var(--blue);background:var(--blue);color:#fff}
+.code-chip.active span{color:rgba(255,255,255,.7)}
+.code-chip:active{transform:scale(.93)}
+
+/* ── CHANTIER FIELD ── */
+.chantier-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px}
+
+/* ── BUTTONS ── */
+.btn{width:100%;height:52px;border:none;border-radius:12px;font-size:15px;
+  font-weight:700;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:7px;transition:.15s;letter-spacing:.2px}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--navy);color:#fff}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-orange{background:var(--orange);color:#fff}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--text)}
+.btn-sm{height:37px;font-size:12px;border-radius:9px;width:auto;padding:0 14px}
+.row{display:flex;gap:9px}.row>*{flex:1}
+.divider{height:1px;background:var(--border);margin:13px 0}
+.mt-8{margin-top:8px}.mt-12{margin-top:12px}
+.text-muted{color:var(--muted);font-size:12px;line-height:1.5}
+
+/* ── HISTORY ── */
+.hist-month{font-size:11px;font-weight:700;color:var(--navy);
+  margin:14px 0 7px;text-transform:uppercase;letter-spacing:.5px}
+.hist-item{background:var(--card);border-radius:12px;padding:11px 13px;
+  margin-bottom:7px;box-shadow:var(--shadow);
+  display:grid;grid-template-columns:48px 1fr auto auto 28px;
+  align-items:center;gap:9px}
+.hist-item.sat{border-left:3px solid #2D7A2D}
+.hist-item.hol{border-left:3px solid var(--amber)}
+.date-box{background:var(--bg);border-radius:8px;text-align:center;padding:5px 3px}
+.date-box .dn{font-size:18px;font-weight:700;line-height:1}
+.date-box .dw{font-size:9px;color:var(--muted);font-weight:600}
+.h-info .h-times{font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.h-code{font-size:9px;font-weight:700;background:var(--blue);color:#fff;
+  border-radius:5px;padding:2px 5px;white-space:nowrap}
+.h-val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;
+  color:var(--navy);white-space:nowrap;text-align:right}
+.h-val.sat{color:#2D7A2D}.h-val.zero{color:var(--muted);font-size:13px}
+.del-btn{background:none;border:none;color:var(--muted);font-size:16px;
+  cursor:pointer;padding:2px 4px;border-radius:5px}
+.del-btn:active{background:var(--red);color:#fff}
+.empty{text-align:center;padding:44px 20px;color:var(--muted)}
+.empty svg{opacity:.25;margin-bottom:10px}
+
+/* ── EXPORT KPIs ── */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px}
+.kpi-box{background:var(--card);border-radius:12px;padding:13px 11px;
+  box-shadow:var(--shadow);text-align:center}
+.kpi-val{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy)}
+.kpi-val.orange{color:var(--orange)}.kpi-val.green{color:var(--green)}
+.kpi-val.red{color:var(--red)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px}
+
+/* ── MONTHLY CSV LIST ── */
+.month-csv-list{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+.month-csv-row{background:var(--card);border-radius:12px;padding:11px 14px;
+  box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.month-csv-row.empty-m{opacity:.45}
+.month-csv-info{flex:1}
+.month-csv-name{font-size:13px;font-weight:700;color:var(--text)}
+.month-csv-count{font-size:11px;color:var(--muted);margin-top:2px}
+.btn-dl{height:34px;border:none;border-radius:9px;background:var(--green);
+  color:#fff;font-size:11px;font-weight:700;padding:0 12px;cursor:pointer;
+  display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
+.btn-dl:disabled{background:var(--border);color:var(--muted);cursor:default}
+.btn-dl svg{width:13px;height:13px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:86px;left:14px;right:14px;background:var(--text);
+  color:#fff;padding:13px 16px;border-radius:12px;font-size:13px;font-weight:600;
+  text-align:center;z-index:9999;transform:translateY(20px);opacity:0;
+  transition:.3s;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{background:var(--green)}.toast.error{background:var(--red)}
+.toast.info{background:var(--blue)}
+
+/* ── BADGE ── */
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;
+  border-radius:20px;margin-left:4px;vertical-align:middle}
+.badge-orange{background:var(--orange);color:#fff}
+
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}
+  40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+.header-icon{width:32px;height:32px;border-radius:50%;
+  background:#fff;padding:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.header-icon svg{width:26px;height:26px}
+</style>
+</head>
+<body>
+
+<!-- ══ LANG PICKER (PIN screen) ══ -->
+<div id="lang-bar">
+  <button class="lang-btn active" onclick="setLang('fr')">FR</button>
+  <button class="lang-btn" onclick="setLang('pt')">PT</button>
+  <button class="lang-btn" onclick="setLang('es')">ES</button>
+  <button class="lang-btn" onclick="setLang('de')">DE</button>
+  <button class="lang-btn" onclick="setLang('en')">EN</button>
+</div>
+
+<!-- ══ PIN ══ -->
+<div id="screen-pin">
+  <svg class="pin-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 75923.37 28132.7" aria-label="MH Maler &amp; Gipser AG"><defs>
+  <style type="text/css">
+   <![CDATA[
+    .lg-str2 {stroke:black;stroke-width:7.38;stroke-miterlimit:22.9256}
+    .lg-str0 {stroke:black;stroke-width:820.48;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:22.9256}
+    .lg-str1 {stroke:black;stroke-width:7.38;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:22.9256}
+    .lg-fil0 {fill:none}
+    .lg-fil2 {fill:none;fill-rule:nonzero}
+    .lg-fil5 {fill:black}
+    .lg-fil3 {fill:black}
+    .lg-fil4 {fill:white}
+    .lg-fil1 {fill:black;fill-rule:nonzero}
+   ]]>
+  </style>
+ </defs>
+ <g id="Plan_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <rect class="lg-fil0 lg-str0" x="410.25" y="410.24" width="16958.71" height="16958.72" rx="3325.23" ry="3391.74"/>
+  <rect class="lg-fil0 lg-str0" x="19791.63" y="410.24" width="16958.73" height="16958.72" rx="3325.24" ry="3391.74"/>
+  <rect class="lg-fil0 lg-str0" x="39173.02" y="410.24" width="16958.71" height="16958.71" rx="3325.23" ry="3391.74"/>
+  <rect class="lg-fil0 lg-str0" x="58554.41" y="410.24" width="16958.72" height="16958.71" rx="3325.24" ry="3391.74"/>
+  <polygon class="lg-fil1" points="4641.13,28025.92 3597.28,28025.92 3597.28,24679.95 2852.35,26850.65 2137.95,26850.65 1393.01,24679.95 1393.01,28025.92 410.25,28025.92 410.25,23029.3 1619.73,23029.3 2523.84,25535.63 3424.25,23029.3 4641.13,23029.3 "/>
+  <polygon id="_1" class="lg-fil1" points="9287.51,28025.92 8243.68,28025.92 8243.68,25826.58 6716.78,25826.58 6716.78,28025.92 5672.94,28025.92 5672.94,23029.3 6716.78,23029.3 6716.78,24857.5 8243.68,24857.5 8243.68,23029.3 9287.51,23029.3 "/>
+  <polygon id="_2" class="lg-fil1" points="16450.96,28025.92 15407.12,28025.92 15407.12,24679.95 14662.17,26850.65 13947.78,26850.65 13202.83,24679.95 13202.83,28025.92 12220.07,28025.92 12220.07,23029.3 13429.56,23029.3 14333.67,25535.63 15234.07,23029.3 16450.96,23029.3 "/>
+  <path id="_3" class="lg-fil1" d="M39734.7 28025.92l-1290 0 -375.71 -422.69c-181.38,176.41 -380.34,308.14 -598.72,395.2 -217.47,87.06 -447.89,130.58 -690.35,130.58 -499.71,0 -891.16,-142.04 -1176.18,-427.26 -285.01,-285.23 -427.52,-657.51 -427.52,-1115.71 0,-190.15 22.2,-355.1 67.55,-495.99 45.34,-140.9 105.49,-268.04 179.52,-379.16 71.26,-109.97 152.7,-203.9 245.23,-281.8 92.54,-77.89 180.45,-145.48 263.73,-201.61 -75.88,-68.73 -148.98,-142.04 -217.46,-217.64 -68.48,-76.74 -127.7,-159.22 -178.61,-248.57 -49.04,-84.76 -86.98,-179.84 -113.82,-285.23 -26.83,-105.39 -40.72,-223.37 -40.72,-355.11 0,-156.93 26.84,-303.55 81.44,-441.01 53.67,-138.61 135.11,-261.17 243.37,-371.13 111.98,-114.55 262.81,-206.19 451.6,-277.21 188.77,-69.87 412.73,-105.39 672.76,-105.39 218.39,0 413.65,26.35 585.77,80.19 171.2,53.83 315.56,129.44 433.08,227.94 110.13,93.93 194.34,208.49 253.56,341.36 58.3,132.87 87.91,276.06 87.91,430.7 0,103.09 -12.03,215.35 -37.02,339.06 -24.05,122.57 -68.47,239.41 -133.25,348.24 -71.26,116.84 -163.8,224.51 -279.47,325.32 -115.68,100.8 -273.92,190.15 -473.8,269.19l829.15 900.35 0 -1076.76 1010.53 0 0 372.29c0,263.46 -36.1,515.47 -108.27,757.17 -72.19,241.7 -172.13,441.01 -297.98,600.23l1033.67 1116.85 0 67.58zm-2554.08 -3871.75c0,-115.7 -14.81,-208.48 -43.49,-277.21 -28.68,-67.58 -63.85,-119.13 -104.57,-155.78 -43.49,-35.52 -88.83,-57.28 -135.11,-66.44 -47.19,-9.17 -85.13,-13.75 -113.82,-13.75 -30.54,0 -64.78,4.58 -103.64,13.75 -38.87,9.16 -81.43,32.07 -127.71,69.87 -37.94,32.08 -71.25,77.89 -99.94,139.75 -28.68,60.71 -43.48,142.05 -43.48,242.85 0,131.73 43.48,260.02 129.55,382.59 86.06,122.57 198.96,249.72 336.85,379.16 100.86,-98.52 176.75,-207.33 228.57,-327.61 50.89,-119.13 76.8,-248.57 76.8,-387.17zm407.17 2882.05l-1154.89 -1272.64c-37.01,44.67 -80.51,124.85 -128.63,239.41 -49.03,115.7 -73.11,243.99 -73.11,384.89 0,148.92 23.14,278.36 70.34,387.17 47.19,108.83 105.49,197.02 173.97,266.9 73.12,71.02 153.62,124.85 242.46,160.37 88.83,35.51 175.82,53.83 260.96,53.83 123.07,0 232.27,-14.88 327.58,-44.67 95.32,-29.78 188.77,-88.2 281.32,-175.26z"/>
+  <path id="_4" class="lg-fil1" d="M45621.11 27739.55c-180.46,87.05 -420.13,174.11 -719.03,260.02 -297.98,85.92 -595.95,129.44 -892.08,129.44 -687.56,0 -1226.14,-231.38 -1614.8,-693.02 -388.66,-462.77 -583.01,-1101.96 -583.01,-1916.4 0,-777.78 196.19,-1403.22 588.55,-1879.74 392.37,-475.38 939.27,-713.64 1641.65,-713.64 265.57,0 518.21,29.79 758.82,89.35 240.59,58.43 508.03,177.55 803.23,353.96l0 1171.83 -116.6 0c-50.91,-46.96 -124.93,-113.4 -222.09,-199.31 -98.1,-85.92 -191.57,-159.23 -282.25,-219.94 -105.49,-71.01 -227.64,-132.87 -367.37,-184.42 -140.67,-51.54 -288.72,-76.74 -446.04,-76.74 -185.07,0 -351.65,33.22 -502.48,100.8 -149.92,67.58 -284.09,169.53 -403.47,309.28 -113.83,134.02 -204.51,304.7 -270.22,512.04 -65.7,206.19 -99.02,445.59 -99.02,715.93 0,553.27 118.46,975.95 356.28,1269.2 236.9,293.24 587.61,439.87 1051.25,439.87 39.79,0 84.21,-1.15 132.33,-3.44 47.19,-2.29 91.62,-5.73 131.41,-10.31l0 -982.83 -810.65 0 0 -941.59 1865.59 0 0 2469.67z"/>
+  <path id="_5" class="lg-fil1" d="M71358.05 28025.92l-1077.15 0 -280.39 -1010.32 -1483.41 0 -281.31 1010.32 -1053.1 0 1488.96 -4996.62 1197.46 0 1488.95 4996.62zm-1607.4 -1924.42l-492.31 -1776.65 -492.31 1776.65 984.61 0z"/>
+  <path id="_6" class="lg-fil1" d="M75513.05 27739.55c-180.45,87.05 -420.12,174.11 -719.02,260.02 -297.98,85.92 -595.96,129.44 -892.09,129.44 -687.55,0 -1226.13,-231.38 -1614.8,-693.02 -388.66,-462.77 -583,-1101.96 -583,-1916.4 0,-777.78 196.19,-1403.22 588.55,-1879.74 392.37,-475.38 939.27,-713.64 1641.64,-713.64 265.58,0 518.22,29.79 758.82,89.35 240.6,58.43 508.03,177.55 803.24,353.96l0 1171.83 -116.6 0c-50.91,-46.96 -124.93,-113.4 -222.09,-199.31 -98.1,-85.92 -191.57,-159.23 -282.25,-219.94 -105.49,-71.01 -227.64,-132.87 -367.37,-184.42 -140.67,-51.54 -288.72,-76.74 -446.04,-76.74 -185.07,0 -351.65,33.22 -502.48,100.8 -149.92,67.58 -284.09,169.53 -403.47,309.28 -113.83,134.02 -204.51,304.7 -270.22,512.04 -65.7,206.19 -99.02,445.59 -99.02,715.93 0,553.27 118.45,975.95 356.28,1269.2 236.9,293.24 587.61,439.87 1051.24,439.87 39.8,0 84.21,-1.15 132.33,-3.44 47.2,-2.29 91.63,-5.73 131.42,-10.31l0 -982.83 -810.65 0 0 -941.59 1865.58 0 0 2469.67z"/>
+  <path id="_7" class="lg-fil1" d="M21208.39 28025.92l-1077.16 0 -280.39 -1010.32 -1483.4 0 -281.31 1010.32 -1053.1 0 1488.96 -4996.62 1197.45 0 1488.96 4996.62zm-1607.41 -1924.42l-492.31 -1776.65 -492.31 1776.65 984.61 0z"/>
+  <polygon id="_8" class="lg-fil1" points="24702.66,28025.92 21793.24,28025.92 21793.24,23029.3 22837.08,23029.3 22837.08,27056.84 24702.66,27056.84 "/>
+  <polygon id="_9" class="lg-fil1" points="28251.54,28025.92 25331.01,28025.92 25331.01,23029.3 28251.54,23029.3 28251.54,23998.38 26374.85,23998.38 26374.85,24857.5 28118.28,24857.5 28118.28,25826.58 26374.85,25826.58 26374.85,27056.84 28251.54,27056.84 "/>
+  <path id="_10" class="lg-fil1" d="M31378.44 24555.09c0,-123.71 -20.37,-230.24 -61.08,-318.45 -41.64,-89.35 -111.98,-159.23 -211.92,-209.63 -69.4,-35.51 -149.92,-57.27 -242.45,-65.29 -92.54,-8.02 -200.81,-11.45 -323.88,-11.45l-371.09 0 0 1333.34 315.56 0c163.79,0 300.75,-10.31 410.88,-29.78 111.05,-20.62 203.58,-65.3 278.54,-136.31 71.26,-68.74 123.08,-144.33 156.39,-227.95 32.4,-83.62 49.05,-194.73 49.05,-334.48zm1632.38 3470.83l-1273.34 0 -1098.43 -1835.07 -471.03 0 0 1835.07 -1043.84 0 0 -4996.62 1744.36 0c238.75,0 443.26,17.18 614.46,50.4 172.13,33.22 332.22,106.53 482.13,217.64 151.76,112.26 272.99,256.59 361.83,434.13 89.76,177.55 134.18,400.92 134.18,668.97 0,368.85 -68.48,668.97 -206.36,901.51 -137.89,232.53 -334.99,426.12 -591.33,580.75l1347.36 2143.21z"/>
+  <polygon id="_11" class="lg-fil1" points="48735.98,28025.92 46370.68,28025.92 46370.68,27139.31 47031.41,27139.31 47031.41,23915.9 46370.68,23915.9 46370.68,23029.3 48735.98,23029.3 48735.98,23915.9 48075.24,23915.9 48075.24,27139.31 48735.98,27139.31 "/>
+  <path id="_12" class="lg-fil1" d="M52915.95 24605.49c0,223.37 -31.47,442.16 -94.39,656.36 -63.85,213.06 -153.62,392.91 -271.14,538.39 -161.02,197.02 -339.62,344.79 -537.66,445.59 -197.1,100.8 -443.25,151.2 -737.53,151.2l-646.84 0 0 1628.89 -1043.84 0 0 -4996.62 1712.9 0c257.26,0 472.88,27.49 649.63,82.48 175.83,54.98 332.21,136.31 467.31,246.28 162.87,131.73 286.87,301.26 372.94,506.3 86.06,206.19 128.62,452.47 128.62,741.13zm-1082.69 30.92c0,-140.89 -30.55,-261.16 -91.63,-363.12 -61.07,-100.8 -131.41,-171.82 -211.92,-211.92 -108.26,-53.83 -212.84,-83.61 -314.63,-89.34 -102.72,-5.74 -238.75,-8.02 -409.02,-8.02l-177.67 0 0 1491.43 296.12 0c175.83,0 320.19,-13.74 434.01,-40.09 113.83,-26.35 209.14,-80.19 286.87,-160.37 65.7,-71.02 113.83,-156.93 143.44,-255.45 29.61,-99.65 44.42,-221.07 44.42,-363.12z"/>
+  <path id="_13" class="lg-fil1" d="M56879.4 26455.46c0,491.42 -168.41,891.19 -505.26,1198.18 -336.84,308.14 -793.98,461.64 -1371.43,461.64 -334.07,0 -625.56,-36.66 -873.57,-108.82 -248.92,-72.17 -481.2,-164.95 -697.74,-276.07l0 -1195.89 113.82 0c214.7,211.92 455.29,374.57 720.88,489.13 266.51,113.4 521.92,170.67 767.14,170.67 63.85,0 146.21,-6.87 249.86,-20.62 102.72,-12.6 186.01,-35.51 251.71,-66.43 78.67,-41.24 144.36,-91.64 196.19,-151.2 50.9,-60.71 76.81,-151.21 76.81,-269.2 0,-109.96 -37.02,-203.89 -111.98,-284.07 -74.96,-79.05 -185.07,-139.75 -329.44,-182.14 -151.77,-44.67 -311.86,-87.06 -481.21,-126.01 -168.41,-38.95 -327.57,-89.35 -475.64,-148.91 -339.62,-136.32 -583,-321.89 -731.99,-555.57 -148.98,-233.68 -223.95,-523.48 -223.95,-870.57 0,-465.07 168.42,-844.22 505.26,-1138.61 336.85,-294.39 769.94,-441.01 1299.25,-441.01 265.59,0 527.47,32.08 786.58,95.08 260.04,64.14 483.97,144.33 673.68,240.55l0 1148.92 -111.04 0c-161.95,-160.36 -361.83,-294.38 -596.88,-402.06 -235.98,-107.68 -476.58,-161.51 -721.8,-161.51 -86.99,0 -173.06,6.87 -258.19,21.77 -86.06,14.88 -168.42,41.23 -248,81.32 -70.33,34.36 -130.48,84.76 -181.38,152.35 -50.9,67.58 -75.88,145.48 -75.88,232.54 0,131.74 40.72,232.54 122.15,303.55 81.44,69.88 234.12,134.02 459.92,192.45 148.06,37.79 290.58,75.6 427.52,111.11 136.04,35.51 282.25,84.76 439.57,147.76 309.07,124.85 536.72,295.54 683.86,510.88 147.13,215.36 221.16,496 221.16,840.79z"/>
+  <polygon id="_14" class="lg-fil1" points="60518.96,28025.92 57598.43,28025.92 57598.43,23029.3 60518.96,23029.3 60518.96,23998.38 58642.27,23998.38 58642.27,24857.5 60385.71,24857.5 60385.71,25826.58 58642.27,25826.58 58642.27,27056.84 60518.96,27056.84 "/>
+  <path id="_15" class="lg-fil1" d="M63645.86 24555.09c0,-123.71 -20.36,-230.24 -61.08,-318.45 -41.64,-89.35 -111.98,-159.23 -211.92,-209.63 -69.4,-35.51 -149.92,-57.27 -242.44,-65.29 -92.55,-8.02 -200.82,-11.45 -323.89,-11.45l-371.08 0 0 1333.34 315.56 0c163.79,0 300.74,-10.31 410.87,-29.78 111.05,-20.62 203.59,-65.3 278.54,-136.31 71.26,-68.74 123.08,-144.33 156.4,-227.95 32.39,-83.62 49.04,-194.73 49.04,-334.48zm1632.38 3470.83l-1273.33 0 -1098.44 -1835.07 -471.02 0 0 1835.07 -1043.85 0 0 -4996.62 1744.36 0c238.76,0 443.26,17.18 614.46,50.4 172.13,33.22 332.23,106.53 482.13,217.64 151.77,112.26 272.99,256.59 361.83,434.13 89.76,177.55 134.18,400.92 134.18,668.97 0,368.85 -68.48,668.97 -206.36,901.51 -137.88,232.53 -334.99,426.12 -591.32,580.75l1347.36 2143.21z"/>
+  <polygon id="_16" class="lg-fil2 lg-str1" points="4641.13,28025.92 3597.28,28025.92 3597.28,24679.95 2852.35,26850.65 2137.95,26850.65 1393.01,24679.95 1393.01,28025.92 410.25,28025.92 410.25,23029.3 1619.73,23029.3 2523.84,25535.63 3424.25,23029.3 4641.13,23029.3 "/>
+  <polygon id="_17" class="lg-fil2 lg-str1" points="9287.51,28025.92 8243.68,28025.92 8243.68,25826.58 6716.78,25826.58 6716.78,28025.92 5672.94,28025.92 5672.94,23029.3 6716.78,23029.3 6716.78,24857.5 8243.68,24857.5 8243.68,23029.3 9287.51,23029.3 "/>
+  <polygon id="_18" class="lg-fil2 lg-str1" points="16450.96,28025.92 15407.12,28025.92 15407.12,24679.95 14662.17,26850.65 13947.78,26850.65 13202.83,24679.95 13202.83,28025.92 12220.07,28025.92 12220.07,23029.3 13429.56,23029.3 14333.67,25535.63 15234.07,23029.3 16450.96,23029.3 "/>
+  <path id="_19" class="lg-fil2 lg-str1" d="M39734.7 28025.92l-1290 0 -375.71 -422.69c-181.38,176.41 -380.34,308.14 -598.72,395.2 -217.47,87.06 -447.89,130.58 -690.35,130.58 -499.71,0 -891.16,-142.04 -1176.18,-427.26 -285.01,-285.23 -427.52,-657.51 -427.52,-1115.71 0,-190.15 22.2,-355.1 67.55,-495.99 45.34,-140.9 105.49,-268.04 179.52,-379.16 71.26,-109.97 152.7,-203.9 245.23,-281.8 92.54,-77.89 180.45,-145.48 263.73,-201.61 -75.88,-68.73 -148.98,-142.04 -217.46,-217.64 -68.48,-76.74 -127.7,-159.22 -178.61,-248.57 -49.04,-84.76 -86.98,-179.84 -113.82,-285.23 -26.83,-105.39 -40.72,-223.37 -40.72,-355.11 0,-156.93 26.84,-303.55 81.44,-441.01 53.67,-138.61 135.11,-261.17 243.37,-371.13 111.98,-114.55 262.81,-206.19 451.6,-277.21 188.77,-69.87 412.73,-105.39 672.76,-105.39 218.39,0 413.65,26.35 585.77,80.19 171.2,53.83 315.56,129.44 433.08,227.94 110.13,93.93 194.34,208.49 253.56,341.36 58.3,132.87 87.91,276.06 87.91,430.7 0,103.09 -12.03,215.35 -37.02,339.06 -24.05,122.57 -68.47,239.41 -133.25,348.24 -71.26,116.84 -163.8,224.51 -279.47,325.32 -115.68,100.8 -273.92,190.15 -473.8,269.19l829.15 900.35 0 -1076.76 1010.53 0 0 372.29c0,263.46 -36.1,515.47 -108.27,757.17 -72.19,241.7 -172.13,441.01 -297.98,600.23l1033.67 1116.85 0 67.58zm-2554.08 -3871.75c0,-115.7 -14.81,-208.48 -43.49,-277.21 -28.68,-67.58 -63.85,-119.13 -104.57,-155.78 -43.49,-35.52 -88.83,-57.28 -135.11,-66.44 -47.19,-9.17 -85.13,-13.75 -113.82,-13.75 -30.54,0 -64.78,4.58 -103.64,13.75 -38.87,9.16 -81.43,32.07 -127.71,69.87 -37.94,32.08 -71.25,77.89 -99.94,139.75 -28.68,60.71 -43.48,142.05 -43.48,242.85 0,131.73 43.48,260.02 129.55,382.59 86.06,122.57 198.96,249.72 336.85,379.16 100.86,-98.52 176.75,-207.33 228.57,-327.61 50.89,-119.13 76.8,-248.57 76.8,-387.17zm407.17 2882.05l-1154.89 -1272.64c-37.01,44.67 -80.51,124.85 -128.63,239.41 -49.03,115.7 -73.11,243.99 -73.11,384.89 0,148.92 23.14,278.36 70.34,387.17 47.19,108.83 105.49,197.02 173.97,266.9 73.12,71.02 153.62,124.85 242.46,160.37 88.83,35.51 175.82,53.83 260.96,53.83 123.07,0 232.27,-14.88 327.58,-44.67 95.32,-29.78 188.77,-88.2 281.32,-175.26z"/>
+  <path id="_20" class="lg-fil2 lg-str1" d="M45621.11 27739.55c-180.46,87.05 -420.13,174.11 -719.03,260.02 -297.98,85.92 -595.95,129.44 -892.08,129.44 -687.56,0 -1226.14,-231.38 -1614.8,-693.02 -388.66,-462.77 -583.01,-1101.96 -583.01,-1916.4 0,-777.78 196.19,-1403.22 588.55,-1879.74 392.37,-475.38 939.27,-713.64 1641.65,-713.64 265.57,0 518.21,29.79 758.82,89.35 240.59,58.43 508.03,177.55 803.23,353.96l0 1171.83 -116.6 0c-50.91,-46.96 -124.93,-113.4 -222.09,-199.31 -98.1,-85.92 -191.57,-159.23 -282.25,-219.94 -105.49,-71.01 -227.64,-132.87 -367.37,-184.42 -140.67,-51.54 -288.72,-76.74 -446.04,-76.74 -185.07,0 -351.65,33.22 -502.48,100.8 -149.92,67.58 -284.09,169.53 -403.47,309.28 -113.83,134.02 -204.51,304.7 -270.22,512.04 -65.7,206.19 -99.02,445.59 -99.02,715.93 0,553.27 118.46,975.95 356.28,1269.2 236.9,293.24 587.61,439.87 1051.25,439.87 39.79,0 84.21,-1.15 132.33,-3.44 47.19,-2.29 91.62,-5.73 131.41,-10.31l0 -982.83 -810.65 0 0 -941.59 1865.59 0 0 2469.67z"/>
+  <path id="_21" class="lg-fil2 lg-str1" d="M71358.05 28025.92l-1077.15 0 -280.39 -1010.32 -1483.41 0 -281.31 1010.32 -1053.1 0 1488.96 -4996.62 1197.46 0 1488.95 4996.62zm-1607.4 -1924.42l-492.31 -1776.65 -492.31 1776.65 984.61 0z"/>
+  <path id="_22" class="lg-fil2 lg-str1" d="M75513.05 27739.55c-180.45,87.05 -420.12,174.11 -719.02,260.02 -297.98,85.92 -595.96,129.44 -892.09,129.44 -687.55,0 -1226.13,-231.38 -1614.8,-693.02 -388.66,-462.77 -583,-1101.96 -583,-1916.4 0,-777.78 196.19,-1403.22 588.55,-1879.74 392.37,-475.38 939.27,-713.64 1641.64,-713.64 265.58,0 518.22,29.79 758.82,89.35 240.6,58.43 508.03,177.55 803.24,353.96l0 1171.83 -116.6 0c-50.91,-46.96 -124.93,-113.4 -222.09,-199.31 -98.1,-85.92 -191.57,-159.23 -282.25,-219.94 -105.49,-71.01 -227.64,-132.87 -367.37,-184.42 -140.67,-51.54 -288.72,-76.74 -446.04,-76.74 -185.07,0 -351.65,33.22 -502.48,100.8 -149.92,67.58 -284.09,169.53 -403.47,309.28 -113.83,134.02 -204.51,304.7 -270.22,512.04 -65.7,206.19 -99.02,445.59 -99.02,715.93 0,553.27 118.45,975.95 356.28,1269.2 236.9,293.24 587.61,439.87 1051.24,439.87 39.8,0 84.21,-1.15 132.33,-3.44 47.2,-2.29 91.63,-5.73 131.42,-10.31l0 -982.83 -810.65 0 0 -941.59 1865.58 0 0 2469.67z"/>
+  <path id="_23" class="lg-fil2 lg-str1" d="M21208.39 28025.92l-1077.16 0 -280.39 -1010.32 -1483.4 0 -281.31 1010.32 -1053.1 0 1488.96 -4996.62 1197.45 0 1488.96 4996.62zm-1607.41 -1924.42l-492.31 -1776.65 -492.31 1776.65 984.61 0z"/>
+  <polygon id="_24" class="lg-fil2 lg-str1" points="24702.66,28025.92 21793.24,28025.92 21793.24,23029.3 22837.08,23029.3 22837.08,27056.84 24702.66,27056.84 "/>
+  <polygon id="_25" class="lg-fil2 lg-str1" points="28251.54,28025.92 25331.01,28025.92 25331.01,23029.3 28251.54,23029.3 28251.54,23998.38 26374.85,23998.38 26374.85,24857.5 28118.28,24857.5 28118.28,25826.58 26374.85,25826.58 26374.85,27056.84 28251.54,27056.84 "/>
+  <path id="_26" class="lg-fil2 lg-str1" d="M31378.44 24555.09c0,-123.71 -20.37,-230.24 -61.08,-318.45 -41.64,-89.35 -111.98,-159.23 -211.92,-209.63 -69.4,-35.51 -149.92,-57.27 -242.45,-65.29 -92.54,-8.02 -200.81,-11.45 -323.88,-11.45l-371.09 0 0 1333.34 315.56 0c163.79,0 300.75,-10.31 410.88,-29.78 111.05,-20.62 203.58,-65.3 278.54,-136.31 71.26,-68.74 123.08,-144.33 156.39,-227.95 32.4,-83.62 49.05,-194.73 49.05,-334.48zm1632.38 3470.83l-1273.34 0 -1098.43 -1835.07 -471.03 0 0 1835.07 -1043.84 0 0 -4996.62 1744.36 0c238.75,0 443.26,17.18 614.46,50.4 172.13,33.22 332.22,106.53 482.13,217.64 151.76,112.26 272.99,256.59 361.83,434.13 89.76,177.55 134.18,400.92 134.18,668.97 0,368.85 -68.48,668.97 -206.36,901.51 -137.89,232.53 -334.99,426.12 -591.33,580.75l1347.36 2143.21z"/>
+  <polygon id="_27" class="lg-fil2 lg-str1" points="48735.98,28025.92 46370.68,28025.92 46370.68,27139.31 47031.41,27139.31 47031.41,23915.9 46370.68,23915.9 46370.68,23029.3 48735.98,23029.3 48735.98,23915.9 48075.24,23915.9 48075.24,27139.31 48735.98,27139.31 "/>
+  <path id="_28" class="lg-fil2 lg-str1" d="M52915.95 24605.49c0,223.37 -31.47,442.16 -94.39,656.36 -63.85,213.06 -153.62,392.91 -271.14,538.39 -161.02,197.02 -339.62,344.79 -537.66,445.59 -197.1,100.8 -443.25,151.2 -737.53,151.2l-646.84 0 0 1628.89 -1043.84 0 0 -4996.62 1712.9 0c257.26,0 472.88,27.49 649.63,82.48 175.83,54.98 332.21,136.31 467.31,246.28 162.87,131.73 286.87,301.26 372.94,506.3 86.06,206.19 128.62,452.47 128.62,741.13zm-1082.69 30.92c0,-140.89 -30.55,-261.16 -91.63,-363.12 -61.07,-100.8 -131.41,-171.82 -211.92,-211.92 -108.26,-53.83 -212.84,-83.61 -314.63,-89.34 -102.72,-5.74 -238.75,-8.02 -409.02,-8.02l-177.67 0 0 1491.43 296.12 0c175.83,0 320.19,-13.74 434.01,-40.09 113.83,-26.35 209.14,-80.19 286.87,-160.37 65.7,-71.02 113.83,-156.93 143.44,-255.45 29.61,-99.65 44.42,-221.07 44.42,-363.12z"/>
+  <path id="_29" class="lg-fil2 lg-str1" d="M56879.4 26455.46c0,491.42 -168.41,891.19 -505.26,1198.18 -336.84,308.14 -793.98,461.64 -1371.43,461.64 -334.07,0 -625.56,-36.66 -873.57,-108.82 -248.92,-72.17 -481.2,-164.95 -697.74,-276.07l0 -1195.89 113.82 0c214.7,211.92 455.29,374.57 720.88,489.13 266.51,113.4 521.92,170.67 767.14,170.67 63.85,0 146.21,-6.87 249.86,-20.62 102.72,-12.6 186.01,-35.51 251.71,-66.43 78.67,-41.24 144.36,-91.64 196.19,-151.2 50.9,-60.71 76.81,-151.21 76.81,-269.2 0,-109.96 -37.02,-203.89 -111.98,-284.07 -74.96,-79.05 -185.07,-139.75 -329.44,-182.14 -151.77,-44.67 -311.86,-87.06 -481.21,-126.01 -168.41,-38.95 -327.57,-89.35 -475.64,-148.91 -339.62,-136.32 -583,-321.89 -731.99,-555.57 -148.98,-233.68 -223.95,-523.48 -223.95,-870.57 0,-465.07 168.42,-844.22 505.26,-1138.61 336.85,-294.39 769.94,-441.01 1299.25,-441.01 265.59,0 527.47,32.08 786.58,95.08 260.04,64.14 483.97,144.33 673.68,240.55l0 1148.92 -111.04 0c-161.95,-160.36 -361.83,-294.38 -596.88,-402.06 -235.98,-107.68 -476.58,-161.51 -721.8,-161.51 -86.99,0 -173.06,6.87 -258.19,21.77 -86.06,14.88 -168.42,41.23 -248,81.32 -70.33,34.36 -130.48,84.76 -181.38,152.35 -50.9,67.58 -75.88,145.48 -75.88,232.54 0,131.74 40.72,232.54 122.15,303.55 81.44,69.88 234.12,134.02 459.92,192.45 148.06,37.79 290.58,75.6 427.52,111.11 136.04,35.51 282.25,84.76 439.57,147.76 309.07,124.85 536.72,295.54 683.86,510.88 147.13,215.36 221.16,496 221.16,840.79z"/>
+  <polygon id="_30" class="lg-fil2 lg-str1" points="60518.96,28025.92 57598.43,28025.92 57598.43,23029.3 60518.96,23029.3 60518.96,23998.38 58642.27,23998.38 58642.27,24857.5 60385.71,24857.5 60385.71,25826.58 58642.27,25826.58 58642.27,27056.84 60518.96,27056.84 "/>
+  <path id="_31" class="lg-fil2 lg-str1" d="M63645.86 24555.09c0,-123.71 -20.36,-230.24 -61.08,-318.45 -41.64,-89.35 -111.98,-159.23 -211.92,-209.63 -69.4,-35.51 -149.92,-57.27 -242.44,-65.29 -92.55,-8.02 -200.82,-11.45 -323.89,-11.45l-371.08 0 0 1333.34 315.56 0c163.79,0 300.74,-10.31 410.87,-29.78 111.05,-20.62 203.59,-65.3 278.54,-136.31 71.26,-68.74 123.08,-144.33 156.4,-227.95 32.39,-83.62 49.04,-194.73 49.04,-334.48zm1632.38 3470.83l-1273.33 0 -1098.44 -1835.07 -471.02 0 0 1835.07 -1043.85 0 0 -4996.62 1744.36 0c238.76,0 443.26,17.18 614.46,50.4 172.13,33.22 332.23,106.53 482.13,217.64 151.77,112.26 272.99,256.59 361.83,434.13 89.76,177.55 134.18,400.92 134.18,668.97 0,368.85 -68.48,668.97 -206.36,901.51 -137.88,232.53 -334.99,426.12 -591.32,580.75l1347.36 2143.21z"/>
+  <g id="_1539752390736">
+   <path class="lg-fil3 lg-str2" d="M9406.75 5479.27c0,496.32 -242.51,896.76 -552.55,1208.62 -442.35,411.48 -1487.03,728.83 -1733.21,1046.93 -279.68,361.4 1040.73,605.07 1189.8,1320.58 15.95,76.54 27.43,288.44 30.82,394.96l28.6 438.09c10.91,89.83 -14.61,80.42 136.59,171.62 398.64,240.46 2357.95,863.98 2717.17,981.28l701.27 223.36c250.39,68.47 725.34,253.5 937.14,295.67 394.94,78.64 738.44,-10.73 1073.53,-178.27 116.83,-58.41 210.08,-113.37 312.74,-189.18 16.59,-12.25 30.48,-19.89 46.68,-32.58 18.46,-14.47 28.16,-23.65 49,-39.06l180.89 -153.74c184.33,-186.48 400.28,-410.48 540,-639.97 124.15,-203.93 192.48,-318.01 294.55,-550.8 248.52,-566.79 335.36,-1208.01 132.98,-1815.38 -112.08,-336.33 -338.34,-722.77 -566.72,-1000.73 -30.34,-36.92 -58.01,-71.67 -85.97,-107.76l-575.06 -604.93c-100.3,-83.85 -215.73,-198.16 -319.46,-279.34l-271.78 -221.34c-578.43,-435.08 -824.23,-609.81 -1462.92,-993.92l-881.33 -492.39 -660.59 -325.67c-46.51,-23.45 -85.88,-38.27 -132.17,-61.56 -389.59,-195.99 -1517.48,-650.44 -1896.02,-666.48 -55.31,-2.34 -132.6,-16.38 -184.99,-17.54 2.37,28.64 11.31,53.36 16.88,79.98 6.99,33.47 11.83,52.58 20.11,85.56 183.85,733.15 914.03,1276.04 914.03,2123.98z"/>
+   <path class="lg-fil3 lg-str2" d="M3996.42 12477.87c1395.43,465.3 2816.66,975.57 4196.05,1483.62l96.61 35.58 973.32 347.56c66.98,23.41 126.35,47.95 193.56,70.61 278.94,94.07 553.96,236.58 861.59,163.62 266.9,-63.31 457.38,-234.42 662.3,-394.41 520.02,-406.98 1018.18,-769.89 1548.4,-1159.14 1186.65,-871.17 326.04,-956.92 -586.51,-1236.81 -478.42,-146.74 -958.14,-310.6 -1433.45,-468.55 -286.62,-96.69 -2535.89,-900.26 -2597.81,-819.25 -61.51,145.9 -73.98,881.99 -1,993.44 77.44,118.24 256.54,181.96 378.61,235.66 399.92,162.56 713,231.86 1110.41,349.87 107.27,31.85 167.27,56.68 264.05,112.45 54.08,34.92 149.39,137.05 151.2,218.63 -48.67,72.67 -152.93,133.8 -259.02,154.85 -701.12,58.12 -2016.68,-460.18 -2725.26,-705.08 -21.06,-7.28 -1059.97,-370.65 -869.2,-393.93 252.21,-30.78 1526.42,613.24 1621.91,427.77 102.23,-198.54 -14.87,-1471.66 -11,-1803.97 97.34,-1203.29 209.97,-1208.05 -1001.88,-1759.67 -602.83,-274.4 -2664.57,-1166.41 -2845.88,-21.03l-12.3 112.46 -5.73 123.25 0.86 135.09c37.34,726.89 599.43,704.9 1199.67,799.61 250.59,38.54 1352.06,196.6 1294.26,556.83 -27.33,170.28 -300.27,51.09 -400.71,22.84 -320.04,-90.01 -674.61,-220.02 -986.77,-340.63 -245.58,-97.71 -1081.23,439.05 -1292.45,558.76 -373.77,211.82 -1269.34,709.85 -1569.94,978.8 -48.75,49.42 -309.24,324.68 -188.7,383.63 748.21,365.9 1451.6,578.57 2234.79,837.56z"/>
+  </g>
+  <g id="_1539752392176">
+   <path class="lg-fil3 lg-str1" d="M23585.86 7974.3l4629.53 0c-22.55,-606.17 4.26,-955.94 66.37,-1575.48 18.4,-183.39 38.07,-367.16 54.99,-550.64 27.26,-244.28 148.83,-777.28 -170.69,-869.15 -217.09,-62.39 -3448.99,-20.57 -3956.51,-20.39l-130.81 6.54c-124.26,-0.16 -271.04,13.75 -385.13,33.48 -205.33,35.52 -267.68,143.12 -275.48,279.4l0 65.95c2.92,59.46 12.77,122.64 23.35,186.48 113.26,766.95 178.57,1548.79 147.76,2323.31 -1.53,38.36 -2.36,76.56 -3.27,114.95 -0.04,1.84 -0.09,3.7 -0.13,5.55zm617.43 -3289.93c36.81,-9.86 433.11,-4.93 592.01,-4.93 270.79,0 1089.31,10.06 1368.48,-22.39 502.58,4.7 1275.61,41.42 1777.51,49.46 904.97,14.51 819.46,348.07 707.58,1141.15 1155.64,-1.76 2077.39,-17.73 3233.09,0.98 23.49,0.4 45.73,0.78 69.08,2.29 70.66,10.72 484.25,10.72 554.94,0 40.48,-6.11 94.06,-2.63 129.98,-7.35 123.07,-16.17 215.32,-36.29 315.99,-102.61 104.33,-68.73 80.16,-212.89 80.16,-383.33l-5.83 -549.42c64.66,0 152.23,4.61 160.99,69.62 19.06,141.14 -10.4,645.78 -10.37,806.85 0.11,383.11 40.99,565.17 -316.13,743.46 -239.9,119.75 -496.67,213.79 -743.31,322.84 -124.29,54.97 -250.92,103.06 -375.19,161.17 -32.11,15.02 -59.74,23.97 -91.54,39.25 -151.84,72.96 -309.88,131.34 -460.06,207.09l-552.49 245.49c-543.95,227.36 -1240.39,504.28 -1751.95,767.96 -471.8,243.17 -476.55,556.01 -452.96,1040.3l7.79 161.76 6.89 123.91c-66.27,31.8 -136.55,30.45 -246.58,119.71 -66.26,53.73 -130.31,122.75 -162.88,209.93 -74.4,199.02 -62.08,655.16 -61.69,919.87 0.06,37.82 5.96,44.57 6.97,78.04l-0.47 242.48c0.44,36.34 6.6,41.66 7.05,77.98 2.73,220.84 -6.79,426.03 -6.79,641.25 0,139.08 -17.53,1880.99 -5.59,1987.42 7.43,66.26 1.62,137.46 5.55,210.31 3.05,56.62 6.31,133.88 23.73,192.11 32.19,107.62 90.74,189.46 174.01,257.66 85.41,69.95 182.21,113.5 291.4,140.3 346.71,85.12 767.17,-59.37 842.5,-396.61 38.81,-173.84 54.39,-720.58 36.38,-881.22 -9.56,-85.05 5.89,-192.93 -1.33,-279.96 -14.23,-172.16 -6.17,-373.17 -6.17,-556.3l0 -1975.29c0,-100.7 -6.55,-179.09 -6.55,-281.24 0,-74.55 8.64,-218.57 -4.93,-276.32 -34.42,-146.26 -112.37,-248.6 -233.07,-329.44 -34.39,-23.04 -153.35,-86.53 -200.23,-87.57 -43.88,-1032.35 -107.64,-833.19 853.78,-1247.36 71.36,-30.74 141.63,-61.48 212.37,-93.5 217.44,-105.47 477.95,-207.05 702.04,-311.76l530.37 -234.89c237.6,-98.71 464.67,-214.22 702.72,-311.08l530.6 -234.69c58.34,-26.19 117.45,-51.89 176.6,-78.47l357.05 -153.14c205.47,-81.9 488.65,-211.51 584.96,-428.83 86.35,-194.83 97.02,-616.03 98.07,-941.44l0 -196.7c0,-148.18 -6.28,-541.41 -43.7,-636.53 -33.73,-85.72 -74.71,-145.77 -149.6,-190.51 -92.52,-55.26 -284.68,-75.57 -405.43,-75.57l-11.7 -647.54c0,-75.91 -42.66,-163.09 -65.32,-219.73 -79.68,-199.09 -369.86,-290.44 -606.41,-290.44l-7593.62 0c-173.74,0 -335.31,37.75 -432.72,116.7 -106.85,86.61 -129.78,227.13 -129.78,419.65 0,359.75 -5.94,575.08 -6.26,929.22zm-609.73 3549.62c-2.48,140.87 -28.28,958.55 62.03,981.28 49.3,12.38 353.03,23.65 429.51,27.72 292.52,25.1 660.6,99.35 908.15,249.55 83.09,50.4 166.87,112.2 226.46,192.14 17.16,23.03 29.04,37.53 43.34,61.3 258.19,429.35 -19.25,1060.01 -66.48,1556.57 -8.94,94.44 -21.11,200.91 -31.04,295.96l-27.12 384.93c0.37,38.28 -4.99,47.77 -6.64,78.38 -1.39,25.39 1,53.15 0.23,78.74 -1,33.48 -6.92,40.23 -6.99,78.06l-6.31 523.47c0,415.85 41.13,860.87 135.08,1186.15 48.68,168.55 115.85,328.82 213.08,447.55 250.36,305.66 653.55,284.47 861.93,14.64 98.28,-127.28 170.36,-268.59 214.43,-426.59 24.47,-87.79 43.61,-161.38 62.96,-257.52 82.87,-411.37 82.31,-844.82 82.31,-1271.63 0,-62.78 -1.43,-265.64 -9.32,-317.73 -9.9,-65.51 -9.8,-235.74 -17.81,-309.21 -21.45,-196.47 -35.52,-398.19 -63.3,-597.31 -27.05,-193.55 -64.76,-372.6 -101.99,-558.63l-67.43 -423.12c-4.86,-36.51 -9.25,-127.48 -4.55,-157.93 12.77,-82.88 -3.04,-142.2 55.18,-271.89 66.27,-147.65 185.16,-256.96 331.29,-329.32 246.52,-122.07 494.25,-169.82 784.28,-209.93 202.68,-26.25 406.68,-45.8 611.1,-49.51 0.15,-326.25 7.12,-649.2 4.11,-976.1l-4616.48 0z"/>
+  </g>
+  <path class="lg-fil3 lg-str2" d="M48507.28 14560.53l12.49 -2404.18 2159.53 11.95 -11.89 2398.66 1704.49 0c194.4,0 244.45,-86.06 243.51,-270.47 -6.16,-1195.95 -0.05,-2407.83 -0.05,-3604.57 0,-687.55 0,-1375.08 0,-2062.63 0,-177.28 6.76,-331.75 6.76,-507.2 0,-171.32 0,-342.64 0,-513.97 0,-90.88 -4.01,-161.79 -6.54,-250.44 -2.93,-103.02 -34.98,-164.87 -101.65,-216.2 -14.83,-11.42 -20.82,-18.4 -36.69,-30.95l-635.71 -527.46c-25.87,-20.33 -45.86,-37.43 -70.02,-58.48 -23.73,-20.69 -46.91,-37.16 -70.64,-57.85 -47.29,-41.23 -91.65,-76.7 -139,-117.97 -23.73,-20.7 -46.91,-37.16 -70.64,-57.85l-419.3 -351.67c-93.77,-81.75 -229.46,-187.45 -311.27,-263.55l-280.3 -233.65c-15.27,-12.95 -20.21,-19.73 -35.84,-31.81l-279.37 -234.58c-49.55,-41.64 -92.76,-79.82 -143.81,-119.93l-139.83 -117.16c-21.96,-20.91 -45.13,-39.27 -69.81,-58.67 -195.36,-153.56 -427.14,-360.61 -630.86,-525.57 -48.72,-39.44 -91.32,-76.24 -140.83,-116.14l-991.13 -814.52c-12.19,-10.78 -18.34,-19.55 -30.55,-30.32l-70.24 -58.23c-14.46,-11.65 -19.76,-19.65 -35.58,-32.06 -180.49,-141.39 -267.98,-90.83 -446.43,48.49 -21.15,16.5 -33.39,24.17 -52.99,41.69 -17.49,15.62 -36.4,31.39 -55.25,46.21l-857.49 711.45c-36.54,31.96 -72.11,56.35 -108.2,87.91l-215.78 176.47c-37.5,29.71 -70.83,58.31 -108.2,87.91 -19.66,15.56 -35.35,28.99 -56.18,45.27 -25.8,20.17 -29.4,28.43 -57.92,43.52 0,-112.81 -1.54,-238.1 -12.38,-339.29 -21.84,-203.94 -40.42,-264.89 -251.34,-276.15 -65.73,-3.51 -111.69,7.19 -168.94,6.96 -124.09,-0.5 -226.04,6.6 -351.82,6.6 -272.7,0 -525.3,-13.52 -798,-13.52 -211.71,0 -355.62,32.96 -389.45,239.49 -31.5,192.42 -2.62,401.65 -2.79,605.85 -0.05,59.02 7.13,97.02 6.93,148.62 -0.2,49.39 -3.75,114.46 0.19,162.1 7.92,95.66 6.41,205.59 6.41,311.45 0,218.22 13.53,408.87 13.53,622.17 0,191.35 -140.19,302.4 -278.15,411.64l-758.05 621.55c-89.61,78.14 -104.22,67.99 -136.45,208.44 -47.64,207.6 -35.46,765.14 -17.94,976.9 10.42,125.78 0.36,301.23 0.36,432.46l0 5234.33c0,150.59 -36.09,506.48 74.43,574.79 43.46,26.86 111.91,40.61 182.55,40.61l5434.1 -6.42z"/>
+  <path class="lg-fil4 lg-str2" d="M51295.62 7351.21l0 105.45c0,154.26 118.2,359.92 189.89,450.91 49.97,63.4 100.87,111.44 157.07,167.39 67.22,66.91 72.22,155.16 66.94,241.36 -7.34,119.54 -77.51,255.07 -136.39,350.69 -42.04,68.28 -109.69,69.35 -224.3,262.39 -185.19,311.97 22.78,675.84 248.93,901.9 27.26,27.25 54.86,47.31 71.23,82.9 77.86,169.37 -3.13,363.46 -87.87,504.77 -115.71,192.95 -132.99,146.11 -207.06,279.63 -88.78,160.05 -100.04,337.95 -29.94,513.85 182.07,456.88 373.29,328.78 373.29,656.87 0,89.89 -42.44,190.7 -72.96,251.49 -19.44,38.71 -36.37,66.68 -58.29,103.94 -34.71,58.98 -28.66,37.65 -77.55,84.67 -141.29,135.84 -221.1,245.64 -221.1,476.49 0,364.53 355.34,625.93 391.81,703.25 121.15,256.75 -148.47,542.93 -148.47,618.93 0,41.79 46.71,81.12 81.12,81.12 105.12,0 243.35,-365.16 243.35,-502.92 0,-302.81 -90.86,-306.39 -224.78,-464.71 -21.62,-25.56 -42.78,-55.21 -62.46,-83.55 -21.75,-31.32 -40.61,-61.36 -58.93,-95.19 -92.97,-171.72 -88.79,-342.21 11.9,-501.94 88.54,-140.48 177.41,-104.2 290.3,-399.19 78.35,-204.7 97.29,-451.31 -75.5,-615.31l-77.27 -76.84c-80.57,-86.89 -200.74,-270.97 -200.74,-399.52 0,-127.04 4.69,-195.51 85.82,-311.64 68.18,-97.59 138.32,-110.67 153.82,-162.53 11.18,-37.46 -5,-20.68 16.25,-56.75 12.89,-21.88 17.74,-24.39 30.9,-50.21 95.72,-187.89 159.53,-430.78 45.52,-627.23 -53.6,-92.34 -126.41,-131.75 -220.02,-258.56 -139.29,-188.68 -190.92,-398.01 -57.31,-611.43 57.78,-92.31 114.5,-101.93 167.63,-173.05 49.97,-66.85 92.99,-137.53 121.27,-219.41 68.16,-197.37 100.06,-352.42 -8.6,-541.28 -33.14,-57.64 -99.94,-114.05 -146.85,-161.39 -86.32,-87.1 -196.55,-279.71 -196.55,-411.82 0,-352.1 243.34,-395.77 243.34,-462.36 0,-64.97 -35.03,-105.43 -81.11,-105.43 -95.48,0 -316.34,269.17 -316.34,454.24z"/>
+  <path class="lg-fil4 lg-str2" d="M43440.25 7338.86c0,200.11 70.54,368.28 177.24,504.13l105.52 121.6c22.02,24.29 71.13,46.83 109.04,126.2 75.69,158.53 -18.84,383.6 -101.27,511.98 -52.33,81.52 -35.73,44.24 -81.82,88.52 -298.74,287.08 -281.97,581.36 -56.32,920.53 43.24,65 95.23,112.35 149.77,166.58 84.26,83.75 103.42,129.11 103.42,253.49 0,124.46 -111.58,358.95 -180.67,443.92 -59.97,73.78 -55.8,31.73 -142.33,174.02 -156,256.53 -49.7,557.95 113.17,776.18l74.31 87.92c28.98,34.96 57.44,44.96 84.65,77.57 148.73,178.15 34.33,427.64 -66.02,594.71 -56.82,94.58 -554.03,365.1 -124.98,999.6 125.28,185.28 370.53,238.79 182.87,656.28 -63.92,142.21 -170.92,222.53 -69.69,285.26 32.15,19.93 53.52,19.99 85.03,-2.03 86.66,-60.63 169.37,-298.12 191.98,-416.6 26.89,-140.91 11.06,-230.95 -56.42,-353.79 -38.91,-70.83 -101.67,-106.53 -149.91,-166.44 -46.78,-58.11 -94.57,-119.18 -128.61,-187.73 -88.76,-178.68 -103.36,-321.42 3.29,-499.75 82.16,-137.38 192.55,-122.75 289.84,-391.53 65.99,-182.36 107.92,-375.85 -9.03,-552.77 -43.98,-66.55 -96.3,-101.79 -148.12,-160.11 -20.91,-23.53 -45.3,-58.31 -62.89,-83.13 -167.28,-235.99 -190.27,-481.55 26.18,-695.69 28.44,-28.14 73.51,-48.32 84.88,-85.46 12.16,-39.68 -3.85,-22.04 19.96,-61.16 115.14,-189.17 201.28,-484.27 60.52,-695.73 -45.58,-68.48 -104.26,-105.18 -154.55,-169.92 -165.17,-212.65 -272.1,-437.37 -100.47,-691.6 80.82,-119.72 156.9,-89.76 276.74,-372.17 77.78,-183.29 98.04,-391.73 -16.83,-563.85 -69.81,-104.62 -334.35,-279.23 -334.35,-598.48 0,-121.09 69.21,-244.04 131.73,-306.3 35.4,-35.25 96.84,-76.47 111.23,-108.56 15.88,-35.43 -30.8,-208.77 -204.45,-33.35 -101.69,102.72 -192.62,241.36 -192.62,407.64z"/>
+  <g id="_1539752398368">
+   <path class="lg-fil3 lg-str2" d="M53558.24 6410.64l0 478.57c0,160.45 235.23,140.53 235.23,16.23l0 -486.7c0,-160.15 -235.23,-136.79 -235.23,-8.11z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 8738.64l0 478.58c0,33.6 10.27,58.33 27.59,77.86 58.44,65.94 207.64,41.37 207.64,-61.64l0 -486.7c0,-160.15 -235.23,-136.79 -235.23,-8.11z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 11066.66l0 478.57c0,33.61 10.27,58.34 27.59,77.86 58.44,65.94 207.64,41.37 207.64,-61.64l0 -486.69c0,-160.15 -235.23,-136.8 -235.23,-8.11z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 12242.82l0 478.57c0,131.51 235.23,148.31 235.23,-8.1l0 -486.7c0,-123.24 -235.23,-145.67 -235.23,16.22z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 7586.81l0 478.57c0,131.5 235.23,148.3 235.23,-8.12l0 -486.69c0,-124.31 -235.23,-144.22 -235.23,16.23z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 9914.82l0 478.57c0,131.5 235.23,148.31 235.23,-8.1l0 -486.7c0,-124.31 -235.23,-144.23 -235.23,16.22z"/>
+   <path class="lg-fil3 lg-str2" d="M53558.24 13394.66l0 478.58c0,155.01 235.23,144.5 235.23,16.21l0 -486.69c0,-157.4 -235.23,-140.08 -235.23,-8.11z"/>
+  </g>
+  <g id="_1539752338176">
+   <path class="lg-fil3 lg-str2" d="M41640.52 6878.6l0 454.25c0,114.22 235.23,185.35 235.23,-48.67 0,-110.75 18.88,-420.85 -27.21,-483.82 -51.02,-69.69 -208.02,-58.13 -208.02,78.23z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 12524.22l0 446.14c0,145.15 235.23,169.07 235.23,-24.33 0,-105.67 17.48,-434.6 -24.22,-494.93 -51.78,-74.95 -211.01,-60.4 -211.01,73.13z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 11396.73l0 438.01c0,147.65 235.23,192.4 235.23,-32.43l0 -381.24c0,-203.49 -235.23,-179.77 -235.23,-24.33z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 10269.23l0 438.02c0,133.24 148.73,147.89 204.47,82.81 18.64,-21.77 30.76,-67.55 30.76,-107.14l0 -381.24c0,-224.84 -235.23,-180.09 -235.23,-32.44z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 9133.61l0 446.13c0,151.2 235.23,174.59 235.23,-24.34l0 -397.45c0,-193.42 -235.23,-169.49 -235.23,-24.33z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 8006.1l0 446.14c0,149.61 235.23,165.94 235.23,-24.33l0 -397.46c0,-193.07 -235.23,-172.88 -235.23,-24.34z"/>
+   <path class="lg-fil3 lg-str2" d="M41640.52 13651.74l0 446.12c0,149.82 235.23,167.17 235.23,-24.33l0 -397.45c0,-190.29 -235.23,-173.95 -235.23,-24.33z"/>
+  </g>
+  <path class="lg-fil3 lg-str2" d="M48801.99 15010.4c-5.26,-19.82 3.6,-10.97 -16.22,-16.22l16.22 16.22z"/>
+  <g id="_1539752348976">
+   <polygon class="lg-fil0" points="60162.6,1959.61 73610.34,1959.61 73610.34,15407.36 60162.6,15407.36 "/>
+   <g>
+    <g>
+     <polygon class="lg-fil5" points="65445.64,2760.07 65765.82,2760.07 65765.82,3080.25 65445.64,3080.25 "/>
+     <polygon class="lg-fil5" points="67046.57,2760.07 67366.75,2760.07 67366.75,3080.25 67046.57,3080.25 "/>
+     <polygon class="lg-fil5" points="68327.3,2760.07 68647.49,2760.07 68647.49,3080.25 68327.3,3080.25 "/>
+     <polygon class="lg-fil5" points="69287.86,2760.07 69608.04,2760.07 69608.04,3080.25 69287.86,3080.25 "/>
+     <polygon class="lg-fil5" points="66086,3080.25 66406.19,3080.25 66406.19,3400.45 66086,3400.45 "/>
+     <path class="lg-fil5" d="M68647.49 3080.25l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M63524.53 3400.45l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-960.55 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 640.37l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M69608.04 3400.45l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M66406.19 4040.82l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 -960.56l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-640.37 640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-1280.74 640.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm640.37 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-640.37 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm640.37 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="69287.86,4040.82 69608.04,4040.82 69608.04,4361 69287.86,4361 "/>
+     <polygon class="lg-fil5" points="68327.3,4361 68647.49,4361 68647.49,4681.18 68327.3,4681.18 "/>
+     <polygon class="lg-fil5" points="63524.53,4681.18 63844.72,4681.18 63844.72,5001.37 63524.53,5001.37 "/>
+     <polygon class="lg-fil5" points="64805.27,4681.18 65125.45,4681.18 65125.45,5001.37 64805.27,5001.37 "/>
+     <polygon class="lg-fil5" points="66086,4681.18 66406.19,4681.18 66406.19,5001.37 66086,5001.37 "/>
+     <polygon class="lg-fil5" points="68007.12,4681.18 68327.3,4681.18 68327.3,5001.37 68007.12,5001.37 "/>
+     <polygon class="lg-fil5" points="69287.86,4681.18 69608.04,4681.18 69608.04,5001.37 69287.86,5001.37 "/>
+     <path class="lg-fil5" d="M65125.45 5001.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="66406.19,5001.37 66726.38,5001.37 66726.38,5321.55 66406.19,5321.55 "/>
+     <path class="lg-fil5" d="M69608.04 5001.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 640.37l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M60963.06 5641.74l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M61603.43 5641.74l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 320.18l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M64485.08 5641.74l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 640.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M66726.38 5641.74l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M68327.3 5641.74l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -960.56l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="72169.51,5641.74 72489.7,5641.74 72489.7,5961.92 72169.51,5961.92 "/>
+     <path class="lg-fil5" d="M62563.98 5961.92l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 -640.37l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.18 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-1600.92 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm640.37 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-1600.92 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm-640.36 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 640.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="65445.64,5961.92 65765.82,5961.92 65765.82,6282.1 65445.64,6282.1 "/>
+     <path class="lg-fil5" d="M66086 5961.92l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M70248.41 5961.92l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-640.37 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm-960.55 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M72489.7 5961.92l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M64164.9 6282.1l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-1280.74 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M66726.38 6282.1l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-640.37 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M69287.86 6282.1l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M71529.14 6282.1l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 640.37l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="62884.16,6602.29 63204.35,6602.29 63204.35,6922.47 62884.16,6922.47 "/>
+     <polygon class="lg-fil5" points="69928.22,6602.29 70248.41,6602.29 70248.41,6922.47 69928.22,6922.47 "/>
+     <polygon class="lg-fil5" points="72169.51,6602.29 72489.7,6602.29 72489.7,6922.47 72169.51,6922.47 "/>
+     <path class="lg-fil5" d="M67686.94 6922.47l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M70248.41 6922.47l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-1600.92 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm1280.74 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="71208.96,6922.47 71529.14,6922.47 71529.14,7242.66 71208.96,7242.66 "/>
+     <path class="lg-fil5" d="M63844.72 7242.66l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="72489.7,7242.66 72809.88,7242.66 72809.88,7562.84 72489.7,7562.84 "/>
+     <polygon class="lg-fil5" points="67686.94,7562.84 68007.12,7562.84 68007.12,7883.02 67686.94,7883.02 "/>
+     <polygon class="lg-fil5" points="68327.3,7562.84 68647.49,7562.84 68647.49,7883.02 68327.3,7883.02 "/>
+     <path class="lg-fil5" d="M62884.16 7883.02l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-1280.74 -960.55l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="68007.12,7883.02 68327.3,7883.02 68327.3,8203.21 68007.12,8203.21 "/>
+     <polygon class="lg-fil5" points="68967.67,7883.02 69287.86,7883.02 69287.86,8203.21 68967.67,8203.21 "/>
+     <polygon class="lg-fil5" points="72489.7,7883.02 72809.88,7883.02 72809.88,8203.21 72489.7,8203.21 "/>
+     <polygon class="lg-fil5" points="60963.06,8203.21 61283.24,8203.21 61283.24,8523.39 60963.06,8523.39 "/>
+     <polygon class="lg-fil5" points="62243.8,8203.21 62563.98,8203.21 62563.98,8523.39 62243.8,8523.39 "/>
+     <path class="lg-fil5" d="M63844.72 8203.21l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M69287.86 8203.21l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 -1280.74l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.18 640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="72169.51,8203.21 72489.7,8203.21 72489.7,8523.39 72169.51,8523.39 "/>
+     <path class="lg-fil5" d="M61283.24 8523.39l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-640.37 -960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 -640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 640.36l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M68007.12 8523.39l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="68647.49,8523.39 68967.67,8523.39 68967.67,8843.58 68647.49,8843.58 "/>
+     <polygon class="lg-fil5" points="72489.7,8523.39 72809.88,8523.39 72809.88,8843.58 72489.7,8843.58 "/>
+     <polygon class="lg-fil5" points="60963.06,8843.58 61283.24,8843.58 61283.24,9163.76 60963.06,9163.76 "/>
+     <polygon class="lg-fil5" points="63204.35,8843.58 63524.53,8843.58 63524.53,9163.76 63204.35,9163.76 "/>
+     <polygon class="lg-fil5" points="68967.67,8843.58 69287.86,8843.58 69287.86,9163.76 68967.67,9163.76 "/>
+     <path class="lg-fil5" d="M72169.51 8843.58l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="61283.24,9163.76 61603.43,9163.76 61603.43,9483.95 61283.24,9483.95 "/>
+     <path class="lg-fil5" d="M61923.61 9163.76l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-640.36 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M64805.27 9163.76l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 -960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 -960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm-1280.73 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm640.36 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-960.55 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-960.55 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm640.37 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-1921.11 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm1280.73 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-1921.1 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm1280.74 0l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="68647.49,9163.76 68967.67,9163.76 68967.67,9483.95 68647.49,9483.95 "/>
+     <path class="lg-fil5" d="M63204.35 9483.95l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="67046.57,9483.95 67366.75,9483.95 67366.75,9804.13 67046.57,9804.13 "/>
+     <polygon class="lg-fil5" points="67686.94,9483.95 68007.12,9483.95 68007.12,9804.13 67686.94,9804.13 "/>
+     <path class="lg-fil5" d="M70888.78 9483.95l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-1280.73 -960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm-640.36 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm640.36 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="71849.33,9483.95 72169.51,9483.95 72169.51,9804.13 71849.33,9804.13 "/>
+     <path class="lg-fil5" d="M60963.06 9804.13l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 640.36l320.18 0 0 320.19 -320.18 0 0 -320.19zm640.37 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-640.37 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-960.55 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm960.55 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-1280.74 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm960.55 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M63844.72 9804.13l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="65765.82,9804.13 66086,9804.13 66086,10124.31 65765.82,10124.31 "/>
+     <path class="lg-fil5" d="M70248.41 9804.13l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="72489.7,9804.13 72809.88,9804.13 72809.88,10124.31 72489.7,10124.31 "/>
+     <path class="lg-fil5" d="M61923.61 10444.5l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-640.37 -640.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M65445.64 10444.5l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M67046.57 10444.5l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.19l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm640.37 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M68647.49 10444.5l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-960.55 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-960.55 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm640.37 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm-960.55 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M70568.59 10444.5l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M72169.51 10444.5l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="65125.45,10764.68 65445.64,10764.68 65445.64,11084.87 65125.45,11084.87 "/>
+     <path class="lg-fil5" d="M66086 10764.68l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 -640.37l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="70248.41,10764.68 70568.59,10764.68 70568.59,11084.87 70248.41,11084.87 "/>
+     <polygon class="lg-fil5" points="66726.38,11084.87 67046.57,11084.87 67046.57,11405.05 66726.38,11405.05 "/>
+     <polygon class="lg-fil5" points="67366.75,11084.87 67686.94,11084.87 67686.94,11405.05 67366.75,11405.05 "/>
+     <polygon class="lg-fil5" points="70248.41,11405.05 70568.59,11405.05 70568.59,11725.24 70248.41,11725.24 "/>
+     <path class="lg-fil5" d="M62884.16 11725.24l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="67686.94,11725.24 68007.12,11725.24 68007.12,12045.43 67686.94,12045.43 "/>
+     <path class="lg-fil5" d="M68647.49 11725.24l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19z"/>
+     <polygon class="lg-fil5" points="69608.04,11725.24 69928.22,11725.24 69928.22,12045.43 69608.04,12045.43 "/>
+     <polygon class="lg-fil5" points="72489.7,11725.24 72809.88,11725.24 72809.88,12045.43 72489.7,12045.43 "/>
+     <path class="lg-fil5" d="M71529.14 12045.43l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-1280.74 -960.55l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 -640.37l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-640.37 640.36l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 640.37l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="72489.7,12365.61 72809.88,12365.61 72809.88,12685.8 72489.7,12685.8 "/>
+     <path class="lg-fil5" d="M72169.51 12685.8l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M67046.57 13005.98l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 640.36l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M68007.12 13005.98l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -640.37l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 640.36l320.18 0 0 320.19 -320.18 0 0 -320.19z"/>
+     <path class="lg-fil5" d="M68647.49 13326.16l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 -640.36l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm-640.36 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="70568.59,13326.16 70888.78,13326.16 70888.78,13646.35 70568.59,13646.35 "/>
+     <polygon class="lg-fil5" points="71529.14,13326.16 71849.33,13326.16 71849.33,13646.35 71529.14,13646.35 "/>
+     <polygon class="lg-fil5" points="66726.38,13646.35 67046.57,13646.35 67046.57,13966.53 66726.38,13966.53 "/>
+     <path class="lg-fil5" d="M68327.3 13646.35l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-320.19 320.19l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M64485.08 13966.53l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 640.36l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-2241.29 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm1600.92 -320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-2881.66 -640.37l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -320.19l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -640.36l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm0 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm-320.18 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -640.36l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.19 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-2241.29 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm960.55 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-2881.66 320.18l320.19 0 0 320.19 -320.19 0 0 -320.19zm640.37 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm2241.29 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 -960.55l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm0 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm-2881.66 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.18 640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm1600.92 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm-2241.28 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm1921.1 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm-1600.92 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <path class="lg-fil5" d="M67366.75 14286.72l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+     <polygon class="lg-fil5" points="69287.86,14286.72 69608.04,14286.72 69608.04,14606.9 69287.86,14606.9 "/>
+     <polygon class="lg-fil5" points="69928.22,14286.72 70248.41,14286.72 70248.41,14606.9 69928.22,14606.9 "/>
+     <path class="lg-fil5" d="M70568.59 14286.72l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 -640.37l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm-320.18 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm320.19 0l320.18 0 0 320.19 -320.18 0 0 -320.19zm320.18 0l320.19 0 0 320.19 -320.19 0 0 -320.19zm0 -320.18l320.19 0 0 320.18 -320.19 0 0 -320.18zm320.19 0l320.18 0 0 320.18 -320.18 0 0 -320.18zm0 320.18l320.18 0 0 320.19 -320.18 0 0 -320.19zm-1280.74 320.19l320.18 0 0 320.18 -320.18 0 0 -320.18zm320.18 0l320.19 0 0 320.18 -320.19 0 0 -320.18zm960.56 0l320.18 0 0 320.18 -320.18 0 0 -320.18z"/>
+    </g>
+    <g>
+     <path class="lg-fil5" d="M60963.06 2760.07l2241.29 0 0 2241.29 -2241.29 0 0 -2241.29zm640.37 320.18l-320.19 0 0 1600.92 1600.92 0 0 -1600.92 -1280.73 0zm8965.16 -320.18l2241.29 0 0 2241.29 -2241.29 0 0 -2241.29zm640.37 320.18l-320.18 0 0 1600.92 1600.92 0 0 -1600.92 -1280.74 0zm-1280.74 8644.98l1600.92 0 0 1600.92 -1600.92 0 0 -1600.92zm640.37 320.19l-320.18 0 0 960.55 960.55 0 0 -960.55 -640.37 0zm-9605.53 320.18l2241.29 0 0 2241.29 -2241.29 0 0 -2241.29zm640.37 320.19l-320.19 0 0 1600.92 1600.92 0 0 -1600.92 -1280.73 0z"/>
+    </g>
+    <g>
+     <path class="lg-fil5" d="M61603.43 3400.45l960.55 0 0 960.55 -960.55 0 0 -960.55zm9605.53 0l960.55 0 0 960.55 -960.55 0 0 -960.55zm-640.37 8965.16l320.19 0 0 320.19 -320.19 0 0 -320.19zm-8965.16 640.37l960.55 0 0 960.55 -960.55 0 0 -960.55z"/>
+    </g>
+   </g>
+  </g>
+ </g></svg>
+  <div class="pin-title" data-i18n="pinTitle">Entrez votre PIN</div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-grid">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2<sub>ABC</sub></button>
+    <button class="pin-key" onclick="pinKey('3')">3<sub>DEF</sub></button>
+    <button class="pin-key" onclick="pinKey('4')">4<sub>GHI</sub></button>
+    <button class="pin-key" onclick="pinKey('5')">5<sub>JKL</sub></button>
+    <button class="pin-key" onclick="pinKey('6')">6<sub>MNO</sub></button>
+    <button class="pin-key" onclick="pinKey('7')">7<sub>PQRS</sub></button>
+    <button class="pin-key" onclick="pinKey('8')">8<sub>TUV</sub></button>
+    <button class="pin-key" onclick="pinKey('9')">9<sub>WXYZ</sub></button>
+    <button class="pin-key gear" onclick="openAdminPrompt()">⚙</button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+</div>
+
+<!-- ══ ADMIN ══ -->
+<div id="screen-admin">
+  <div class="admin-title">⚙ <span data-i18n="adminTitle">Configuration</span></div>
+  <div class="admin-sub" data-i18n="adminSub">Accès patron — gérez les employés et PINs</div>
+  <div class="admin-card">
+    <div class="admin-card-title" data-i18n="adminAdd">Ajouter un employé</div>
+    <label class="admin-lbl" data-i18n="adminName">Prénom et Nom</label>
+    <input class="admin-inp" type="text" id="new-emp-name" maxlength="40">
+    <label class="admin-lbl" data-i18n="adminPin">PIN personnel (4 chiffres)</label>
+    <input class="admin-inp pin-inp" type="tel" id="new-emp-pin" placeholder="1234" maxlength="4">
+    <button class="btn-admin-add" onclick="adminAdd()" data-i18n="adminAddBtn">+ Ajouter l'employé</button>
+    <p class="admin-note" data-i18n="adminNote">⚠ PIN unique par employé. Communiquez-le en privé.</p>
+  </div>
+  <div class="admin-card">
+    <div class="admin-card-title"><span data-i18n="adminTeam">Équipe</span> (<span id="emp-count">0</span>)</div>
+    <div id="admin-emp-list"></div>
+  </div>
+  <button class="btn-admin-back" onclick="adminBack()" data-i18n="adminBack">← Retour</button>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <header class="app-header">
+    <div class="header-top">
+      <div class="header-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17496.13 17451.13"><defs><style>.ic-fil0{fill:#1F3864}.ic-str0{stroke:#1F3864;stroke-width:7.25;stroke-miterlimit:22.9256}</style></defs><g id="Plan_x0020_1"><metadata id="CorelCorpID_0Corel-Layer"/><g id="_2126445546176"><path class="ic-fil0 ic-str0" d="M10440.68 15589.99l-75.2 37.45 -655.93 119.51 -5.62 -6119.31 2051.05 -1.31 1.47 5481.83c-176.58,154.21 -1019.34,449.92 -1315.77,481.84zm5032.35 -4529.74l-29.79 53.69c-195.91,800.77 -1314.35,2497.81 -1845.15,2781.12l-7.61 -10322.9c134.73,49.06 86.87,15.86 185.69,148.9l50.19 35.66c156.95,157.56 294.51,328.18 435.69,516.99l46.53 34.98c149.09,212.55 292.28,399.01 453.99,643.31 429.08,648.23 770.86,1501.98 942.13,2297.15 345.97,1606.25 126.11,2388.73 -231.66,3811.09zm-8864.56 -10792.18l-73.9 38.04 -416.97 97.07 -55.34 46.27 -465.29 156.57c114.81,487.38 434.24,1018.33 525.98,1507.68 474.48,-84.51 944.55,-338.68 1689.74,-404.98 -42.06,2324.03 12.53,4685.67 4.53,7015.88 -2.98,867.2 51.52,6358.91 -10.19,7026.7l-763.84 -132.55 -0.22 1663.25 384.84 68.75 118.39 35.72c696.08,15.1 1259.83,107.21 1990.84,31.59 1771.04,-183.24 3212.55,-748.1 4546.6,-1769.91 4644.03,-3557.06 4523.63,-10537.79 -232.15,-13994.96 -401.29,-291.72 -829.95,-551.03 -1313.67,-791.46 -309.17,-153.67 -1213.14,-534.53 -1577.79,-559.4l-3.06 1659.17c230.94,151.2 572.26,179.4 796.2,345.06l8.33 5485.04 -2056.08 -2.11 -3.17 -7721.54c-389.81,-90.04 -1191.6,-68.87 -1610.86,-36.38 -542.39,42.02 -1005.02,182.98 -1482.92,236.51z"/><path class="ic-fil0 ic-str0" d="M1987.18 6562.26l28.87 -57.97c174.79,-661.68 829.34,-1835.44 1297,-2316.51 135.12,-139 417.19,-517.97 590.09,-600.14l19.76 10323.14c-170.98,-82.46 -522.69,-511.98 -645.3,-648.52 -514.6,-573.04 -1086.3,-1631.64 -1306.13,-2420.13 -327.83,-1175.82 -419.45,-2061.84 -221.23,-3284.22 59.4,-366.34 156.93,-658.12 236.95,-995.65zm-1421.07 -921.72l-28.9 58.14c-121.27,452.62 -344.64,961.05 -382.9,1464.05l-33.13 86.18c-15.75,340.33 -87.41,700.09 -105.94,1060.98 -119.89,2334.25 694.6,4391.55 2100.93,6108.5l46.78 34.88c127.56,132.48 219.69,261.67 351.4,401.14 145.09,153.65 255.95,219.27 404.06,355.68 587.34,540.9 2061.8,1571.35 2819.75,1693.08 0.33,-1622.18 2.5,-3243.99 4.04,-4866.02 0.69,-734.54 51.18,-4375.29 -19.46,-4784.37 112.7,75.95 537.57,851.28 607.21,1021.09l39.56 38.68c154.14,282.3 330.6,546.31 470.36,831.13 122.03,-81.24 409.2,-702.37 485.8,-839.31 289.39,-517.39 384.76,-581.85 267.08,-838.96 -135.48,-296.02 -256.58,-620.87 -379.45,-933.01 -113.2,-287.61 -274.57,-611.72 -365.15,-905.88l-32.13 -47.52c-123.66,-474.43 -1675.64,-4021.36 -1854.29,-4698.85 -366.95,91.74 -1181.32,684.13 -1453.24,880.02 -490.5,353.37 -821.21,699.64 -1196.87,1081.8 -586.16,596.29 -1523.33,1980.63 -1745.5,2798.58z"/></g></g></svg></div>
+      <div class="header-emp" id="header-name">—</div>
+      <div class="header-right">
+        <button class="btn-lang-sm" onclick="openLangModal()">🌐</button>
+        <button class="btn-logout" onclick="logout()" data-i18n="logout">Déconnexion</button>
+      </div>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="clock-date" id="clock-date"></div>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- SAISIE -->
+    <div class="view active" id="view-saisie">
+      <div class="card">
+        <div class="card-title" data-i18n="cardDate">Date</div>
+        <div class="field"><input type="date" id="date-input"></div>
+      </div>
+
+      <div class="h-result">
+        <div class="val" id="result-h">0.00</div>
+        <div class="unit" data-i18n="netHours">heures nettes calculées</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="cardPeriods">Périodes travaillées</div>
+        <div class="periode-row">
+          <input type="time" id="p1d" oninput="calc()">
+          <div class="sep">→</div>
+          <input type="time" id="p1f" oninput="calc()">
+          <button class="btn-now" onclick="setNow('p1f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
+        </div>
+        <div class="periode-row">
+          <input type="time" id="p2d" oninput="calc()">
+          <div class="sep">→</div>
+          <input type="time" id="p2f" oninput="calc()">
+          <button class="btn-now" onclick="setNow('p2f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
+        </div>
+        <div class="periode-row">
+          <input type="time" id="p3d" oninput="calc()">
+          <div class="sep">→</div>
+          <input type="time" id="p3f" oninput="calc()">
+          <button class="btn-now" onclick="setNow('p3f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
+        </div>
+        <div class="divider"></div>
+        <div class="row">
+          <button class="btn btn-primary btn-sm" onclick="pointerNow()" style="flex:2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+            <span data-i18n="pointNow">Pointer maintenant</span>
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="clearT()" data-i18n="clear">Effacer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="cardAbsence">Code d'absence</div>
+        <div class="code-grid">
+          <button class="code-chip active" data-code="" onclick="selCode(this)">—<span data-i18n="codeNone">Aucun</span></button>
+          <button class="code-chip" data-code="V" onclick="selCode(this)">V<span data-i18n="codeV">Vacances</span></button>
+          <button class="code-chip" data-code="M" onclick="selCode(this)">M<span data-i18n="codeM">Maladie</span></button>
+          <button class="code-chip" data-code="A" onclick="selCode(this)">A<span data-i18n="codeA">Accident</span></button>
+          <button class="code-chip" data-code="Mil" onclick="selCode(this)">Mil<span data-i18n="codeMil">Militaire</span></button>
+          <button class="code-chip" data-code="AP" onclick="selCode(this)">AP<span data-i18n="codeAP">Abs. payée</span></button>
+          <button class="code-chip" data-code="C" onclick="selCode(this)">C<span data-i18n="codeC">Correction</span></button>
+          <button class="code-chip" data-code="F" onclick="selCode(this)">F<span data-i18n="codeF">Férié</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="cardDetails">Détails</div>
+        <div class="chantier-row">
+          <div class="field" style="margin:0">
+            <label data-i18n="labelSite">Chantier / Client</label>
+            <input type="text" id="chantier" maxlength="40"
+              style="height:46px;border:1.5px solid var(--border);border-radius:10px;
+              padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
+          </div>
+          <div class="field" style="margin:0">
+            <label data-i18n="labelKm">Km trajet</label>
+            <input type="number" id="km" placeholder="0" min="0" max="999"
+              style="height:46px;border:1.5px solid var(--border);border-radius:10px;
+              padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
+          </div>
+        </div>
+        <textarea id="cmt" data-i18n-placeholder="cmtPlaceholder" placeholder="Commentaire libre…"></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="save()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span data-i18n="saveBtn">Enregistrer</span>
+      </button>
+      <div class="mt-12"></div>
+    </div>
+
+    <!-- HISTORIQUE -->
+    <div class="view" id="view-historique">
+      <div id="hist-body"></div>
+    </div>
+
+    <!-- EXPORT -->
+    <div class="view" id="view-export">
+      <div class="card">
+        <div class="card-title" data-i18n="exportTitle">Export mensuel — un fichier par mois</div>
+        <p class="text-muted" style="margin-bottom:10px" data-i18n="exportDesc">
+          Cliquez sur ↓ pour télécharger le CSV de chaque mois.
+        </p>
+        <div class="month-csv-list" id="month-csv-list"></div>
+        <div class="divider"></div>
+        <button class="btn btn-outline" onclick="exportAll()" style="height:44px;font-size:13px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span data-i18n="exportAll">Exporter tous les mois</span>
+        </button>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-box"><div class="kpi-val" id="kJours">—</div><div class="kpi-lbl" data-i18n="kpiDays">Jours saisis</div></div>
+        <div class="kpi-box"><div class="kpi-val" id="kH">—</div><div class="kpi-lbl" data-i18n="kpiHours">Heures totales</div></div>
+        <div class="kpi-box"><div class="kpi-val orange" id="kSat">—</div><div class="kpi-lbl" data-i18n="kpiSat">H. samedis</div></div>
+        <div class="kpi-box"><div class="kpi-val green" id="kVac">—</div><div class="kpi-lbl" data-i18n="kpiVac">J. vacances</div></div>
+      </div>
+
+      <button class="btn btn-red" onclick="clearAllData()" style="height:42px;font-size:12px;margin-bottom:12px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        <span data-i18n="clearAll">Effacer toutes mes données</span>
+      </button>
+    </div>
+
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="goView('saisie',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+      <span data-i18n="navEntry">Saisie</span>
+    </button>
+    <button class="nav-btn" onclick="goView('historique',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span data-i18n="navHistory">Historique</span>
+    </button>
+    <button class="nav-btn" onclick="goView('export',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span data-i18n="navExport">Export</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ══ LANG MODAL ══ -->
+<div id="lang-modal" onclick="closeLangModal(event)">
+  <div class="lang-sheet">
+    <div class="lang-sheet-title" data-i18n="langTitle">Langue / Language</div>
+    <div class="lang-option sel" data-lang="fr" onclick="setLangFromModal('fr')">
+      <div class="lang-flag">🇫🇷</div>
+      <div><div class="lang-name">Français</div><div class="lang-native">Langue par défaut</div></div>
+      <div class="lang-check">✓</div>
+    </div>
+    <div class="lang-option" data-lang="pt" onclick="setLangFromModal('pt')">
+      <div class="lang-flag">🇵🇹</div>
+      <div><div class="lang-name">Português</div><div class="lang-native">Idioma padrão</div></div>
+      <div class="lang-check">✓</div>
+    </div>
+    <div class="lang-option" data-lang="es" onclick="setLangFromModal('es')">
+      <div class="lang-flag">🇪🇸</div>
+      <div><div class="lang-name">Español</div><div class="lang-native">Idioma por defecto</div></div>
+      <div class="lang-check">✓</div>
+    </div>
+    <div class="lang-option" data-lang="de" onclick="setLangFromModal('de')">
+      <div class="lang-flag">🇩🇪</div>
+      <div><div class="lang-name">Deutsch</div><div class="lang-native">Standardsprache</div></div>
+      <div class="lang-check">✓</div>
+    </div>
+    <div class="lang-option" data-lang="en" onclick="setLangFromModal('en')">
+      <div class="lang-flag">🇬🇧</div>
+      <div><div class="lang-name">English</div><div class="lang-native">Default language</div></div>
+      <div class="lang-check">✓</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  TRANSLATIONS
+// ══════════════════════════════════════════════════════════════════
+const I18N = {
+fr:{
+  pinTitle:'Entrez votre PIN',
+  adminTitle:'Configuration',adminSub:'Accès patron — gérez les employés et PINs',
+  adminAdd:'Ajouter un employé',adminName:'Prénom et Nom',adminPin:'PIN personnel (4 chiffres)',
+  adminAddBtn:"+ Ajouter l'employé",adminNote:'⚠ PIN unique par employé. Communiquez-le en privé.',
+  adminTeam:'Équipe',adminBack:'← Retour',
+  logout:'Déconnexion',
+  cardDate:'Date',netHours:'heures nettes calculées',cardPeriods:'Périodes travaillées',
+  pointNow:'Pointer maintenant',clear:'Effacer',
+  cardAbsence:"Code d'absence",
+  codeNone:'Aucun',codeV:'Vacances',codeM:'Maladie',codeA:'Accident',
+  codeMil:'Militaire',codeAP:'Abs. payée',codeC:'Correction',codeF:'Férié',
+  cardDetails:'Détails',labelSite:'Chantier / Client',labelKm:'Km trajet',
+  cmtPlaceholder:'Commentaire libre…',saveBtn:'Enregistrer',
+  navEntry:'Saisie',navHistory:'Historique',navExport:'Export',
+  exportTitle:'Export mensuel — un fichier par mois',
+  exportDesc:'Cliquez sur ↓ pour télécharger le CSV de chaque mois.',
+  exportAll:'Exporter tous les mois',
+  kpiDays:'Jours saisis',kpiHours:'Heures totales',kpiSat:'H. samedis',kpiVac:'J. vacances',
+  clearAll:'Effacer toutes mes données',
+  langTitle:'Langue / Language',
+  pinErr:'PIN incorrect — réessayez',
+  saveOk:'Enregistré ✓',noData:'Aucune donnée',
+  confirmDel:'Supprimer cette saisie?',confirmDelAll:'Effacer TOUTES vos données?',
+  confirmReplace:'Saisie existante pour ce jour. Remplacer?',
+  noHour:"Entrez une heure ou un code d'absence",noDate:'Sélectionnez une date',
+  downloaded:'CSV téléchargé ✓',sharedOk:'Partagé ✓',noDataMonth:'Aucune donnée ce mois',
+  months:['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],
+  days:['Di','Lu','Ma','Me','Je','Ve','Sa'],
+  dlBtn:'↓ CSV',emptyMonth:'vide',entriesCount:'entrée(s)',
+  exportAllDone:'Tous les CSV téléchargés',
+  adminPinErr:'PIN admin incorrect',empExists:'Cet employé existe déjà',pinUsed:'Ce PIN est déjà utilisé',
+  pinAdmin:'Ce PIN est réservé à l\'admin',pinFormat:'PIN = exactement 4 chiffres',nameEmpty:'Entrez un nom',
+  empAdded:' ajouté ✓',deleted:'Supprimé',dataCleared:'Données effacées',
+},
+pt:{
+  pinTitle:'Introduza o seu PIN',
+  adminTitle:'Configuração',adminSub:'Acesso patrão — gerir funcionários e PINs',
+  adminAdd:'Adicionar funcionário',adminName:'Nome e Apelido',adminPin:'PIN pessoal (4 dígitos)',
+  adminAddBtn:'+ Adicionar funcionário',adminNote:'⚠ PIN único por funcionário. Comunique em privado.',
+  adminTeam:'Equipa',adminBack:'← Voltar',
+  logout:'Sair',
+  cardDate:'Data',netHours:'horas líquidas calculadas',cardPeriods:'Períodos trabalhados',
+  pointNow:'Registar agora',clear:'Limpar',
+  cardAbsence:'Código de ausência',
+  codeNone:'Nenhum',codeV:'Férias',codeM:'Doença',codeA:'Acidente',
+  codeMil:'Militar',codeAP:'Aus. paga',codeC:'Correção',codeF:'Feriado',
+  cardDetails:'Detalhes',labelSite:'Obra / Cliente',labelKm:'Km percurso',
+  cmtPlaceholder:'Comentário livre…',saveBtn:'Guardar',
+  navEntry:'Registo',navHistory:'Histórico',navExport:'Exportar',
+  exportTitle:'Exportação mensal — um ficheiro por mês',
+  exportDesc:'Clique em ↓ para descarregar o CSV de cada mês.',
+  exportAll:'Exportar todos os meses',
+  kpiDays:'Dias registados',kpiHours:'Horas totais',kpiSat:'H. sábados',kpiVac:'Dias férias',
+  clearAll:'Apagar todos os meus dados',
+  langTitle:'Língua / Language',
+  pinErr:'PIN incorreto — tente novamente',
+  saveOk:'Guardado ✓',noData:'Sem dados',
+  confirmDel:'Apagar este registo?',confirmDelAll:'Apagar TODOS os seus dados?',
+  confirmReplace:'Registo existente para este dia. Substituir?',
+  noHour:'Introduza uma hora ou um código de ausência',noDate:'Selecione uma data',
+  downloaded:'CSV descarregado ✓',sharedOk:'Partilhado ✓',noDataMonth:'Sem dados este mês',
+  months:['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+  days:['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],
+  dlBtn:'↓ CSV',emptyMonth:'vazio',entriesCount:'registo(s)',
+  exportAllDone:'Todos os CSV descarregados',
+  adminPinErr:'PIN admin incorreto',empExists:'Este funcionário já existe',pinUsed:'Este PIN já está a ser usado',
+  pinAdmin:'Este PIN está reservado ao admin',pinFormat:'PIN = exatamente 4 dígitos',nameEmpty:'Introduza um nome',
+  empAdded:' adicionado ✓',deleted:'Apagado',dataCleared:'Dados apagados',
+},
+es:{
+  pinTitle:'Introduzca su PIN',
+  adminTitle:'Configuración',adminSub:'Acceso patrón — gestionar empleados y PINs',
+  adminAdd:'Añadir empleado',adminName:'Nombre y Apellido',adminPin:'PIN personal (4 dígitos)',
+  adminAddBtn:'+ Añadir empleado',adminNote:'⚠ PIN único por empleado. Comuníquelo en privado.',
+  adminTeam:'Equipo',adminBack:'← Volver',
+  logout:'Salir',
+  cardDate:'Fecha',netHours:'horas netas calculadas',cardPeriods:'Períodos trabajados',
+  pointNow:'Fichar ahora',clear:'Borrar',
+  cardAbsence:'Código de ausencia',
+  codeNone:'Ninguno',codeV:'Vacaciones',codeM:'Enfermedad',codeA:'Accidente',
+  codeMil:'Militar',codeAP:'Aus. pagada',codeC:'Corrección',codeF:'Festivo',
+  cardDetails:'Detalles',labelSite:'Obra / Cliente',labelKm:'Km trayecto',
+  cmtPlaceholder:'Comentario libre…',saveBtn:'Guardar',
+  navEntry:'Registro',navHistory:'Historial',navExport:'Exportar',
+  exportTitle:'Exportación mensual — un archivo por mes',
+  exportDesc:'Pulse ↓ para descargar el CSV de cada mes.',
+  exportAll:'Exportar todos los meses',
+  kpiDays:'Días registrados',kpiHours:'Horas totales',kpiSat:'H. sábados',kpiVac:'Días vacaciones',
+  clearAll:'Borrar todos mis datos',
+  langTitle:'Idioma / Language',
+  pinErr:'PIN incorrecto — inténtelo de nuevo',
+  saveOk:'Guardado ✓',noData:'Sin datos',
+  confirmDel:'¿Eliminar este registro?',confirmDelAll:'¿Borrar TODOS sus datos?',
+  confirmReplace:'Registro existente para este día. ¿Reemplazar?',
+  noHour:'Introduzca una hora o un código de ausencia',noDate:'Seleccione una fecha',
+  downloaded:'CSV descargado ✓',sharedOk:'Compartido ✓',noDataMonth:'Sin datos este mes',
+  months:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+  days:['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],
+  dlBtn:'↓ CSV',emptyMonth:'vacío',entriesCount:'registro(s)',
+  exportAllDone:'Todos los CSV descargados',
+  adminPinErr:'PIN admin incorrecto',empExists:'Este empleado ya existe',pinUsed:'Este PIN ya está en uso',
+  pinAdmin:'Este PIN está reservado al admin',pinFormat:'PIN = exactamente 4 dígitos',nameEmpty:'Introduzca un nombre',
+  empAdded:' añadido ✓',deleted:'Eliminado',dataCleared:'Datos borrados',
+},
+de:{
+  pinTitle:'PIN eingeben',
+  adminTitle:'Einstellungen',adminSub:'Chef-Zugang — Mitarbeiter und PINs verwalten',
+  adminAdd:'Mitarbeiter hinzufügen',adminName:'Vor- und Nachname',adminPin:'Persönlicher PIN (4 Ziffern)',
+  adminAddBtn:'+ Mitarbeiter hinzufügen',adminNote:'⚠ Einzigartiger PIN pro Mitarbeiter. Vertraulich mitteilen.',
+  adminTeam:'Team',adminBack:'← Zurück',
+  logout:'Abmelden',
+  cardDate:'Datum',netHours:'berechnete Nettostunden',cardPeriods:'Arbeitsperioden',
+  pointNow:'Jetzt stempeln',clear:'Löschen',
+  cardAbsence:'Abwesenheitscode',
+  codeNone:'Keiner',codeV:'Ferien',codeM:'Krankheit',codeA:'Unfall',
+  codeMil:'Militär',codeAP:'Bezahlte Abw.',codeC:'Korrektur',codeF:'Feiertag',
+  cardDetails:'Details',labelSite:'Baustelle / Kunde',labelKm:'Km Fahrt',
+  cmtPlaceholder:'Freier Kommentar…',saveBtn:'Speichern',
+  navEntry:'Erfassung',navHistory:'Verlauf',navExport:'Export',
+  exportTitle:'Monatlicher Export — eine Datei pro Monat',
+  exportDesc:'Klicken Sie auf ↓ um die CSV-Datei des jeweiligen Monats herunterzuladen.',
+  exportAll:'Alle Monate exportieren',
+  kpiDays:'Erfasste Tage',kpiHours:'Gesamtstunden',kpiSat:'Sa.-Stunden',kpiVac:'Ferientage',
+  clearAll:'Alle meine Daten löschen',
+  langTitle:'Sprache / Language',
+  pinErr:'Falscher PIN — erneut versuchen',
+  saveOk:'Gespeichert ✓',noData:'Keine Daten',
+  confirmDel:'Diesen Eintrag löschen?',confirmDelAll:'ALLE Ihre Daten löschen?',
+  confirmReplace:'Eintrag für diesen Tag vorhanden. Ersetzen?',
+  noHour:'Geben Sie eine Uhrzeit oder einen Abwesenheitscode ein',noDate:'Datum auswählen',
+  downloaded:'CSV heruntergeladen ✓',sharedOk:'Geteilt ✓',noDataMonth:'Keine Daten diesen Monat',
+  months:['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'],
+  days:['So','Mo','Di','Mi','Do','Fr','Sa'],
+  dlBtn:'↓ CSV',emptyMonth:'leer',entriesCount:'Eintrag/Einträge',
+  exportAllDone:'Alle CSVs heruntergeladen',
+  adminPinErr:'Admin-PIN falsch',empExists:'Dieser Mitarbeiter existiert bereits',pinUsed:'Dieser PIN wird bereits verwendet',
+  pinAdmin:'Dieser PIN ist für den Admin reserviert',pinFormat:'PIN = genau 4 Ziffern',nameEmpty:'Name eingeben',
+  empAdded:' hinzugefügt ✓',deleted:'Gelöscht',dataCleared:'Daten gelöscht',
+},
+en:{
+  pinTitle:'Enter your PIN',
+  adminTitle:'Settings',adminSub:'Manager access — manage employees and PINs',
+  adminAdd:'Add employee',adminName:'First and Last Name',adminPin:'Personal PIN (4 digits)',
+  adminAddBtn:'+ Add employee',adminNote:'⚠ Unique PIN per employee. Share privately.',
+  adminTeam:'Team',adminBack:'← Back',
+  logout:'Log out',
+  cardDate:'Date',netHours:'net hours calculated',cardPeriods:'Work periods',
+  pointNow:'Clock in now',clear:'Clear',
+  cardAbsence:'Absence code',
+  codeNone:'None',codeV:'Holiday',codeM:'Sick leave',codeA:'Accident',
+  codeMil:'Military',codeAP:'Paid absence',codeC:'Correction',codeF:'Public holiday',
+  cardDetails:'Details',labelSite:'Site / Client',labelKm:'Km distance',
+  cmtPlaceholder:'Free comment…',saveBtn:'Save',
+  navEntry:'Entry',navHistory:'History',navExport:'Export',
+  exportTitle:'Monthly export — one file per month',
+  exportDesc:'Click ↓ to download the CSV for each month.',
+  exportAll:'Export all months',
+  kpiDays:'Days entered',kpiHours:'Total hours',kpiSat:'Sat. hours',kpiVac:'Holiday days',
+  clearAll:'Delete all my data',
+  langTitle:'Language',
+  pinErr:'Wrong PIN — please try again',
+  saveOk:'Saved ✓',noData:'No data',
+  confirmDel:'Delete this entry?',confirmDelAll:'Delete ALL your data?',
+  confirmReplace:'Entry already exists for this day. Replace?',
+  noHour:'Enter a time or an absence code',noDate:'Select a date',
+  downloaded:'CSV downloaded ✓',sharedOk:'Shared ✓',noDataMonth:'No data this month',
+  months:['January','February','March','April','May','June','July','August','September','October','November','December'],
+  days:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  dlBtn:'↓ CSV',emptyMonth:'empty',entriesCount:'entry/entries',
+  exportAllDone:'All CSVs downloaded',
+  adminPinErr:'Wrong admin PIN',empExists:'This employee already exists',pinUsed:'This PIN is already in use',
+  pinAdmin:'This PIN is reserved for the admin',pinFormat:'PIN = exactly 4 digits',nameEmpty:'Enter a name',
+  empAdded:' added ✓',deleted:'Deleted',dataCleared:'Data cleared',
+},
+};
+
+// ══════════════════════════════════════════════════════════════════
+//  LANG ENGINE
+// ══════════════════════════════════════════════════════════════════
+let lang = localStorage.getItem('mh_lang') || 'fr';
+const t = key => (I18N[lang]||I18N.fr)[key] || key;
+
+function setLang(l, save=true) {
+  lang = l;
+  if (save) localStorage.setItem('mh_lang', l);
+  // Update all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = t(key);
+    else el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  // Update lang bar buttons
+  document.querySelectorAll('#lang-bar .lang-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === l.toUpperCase());
+  });
+  // Update modal
+  document.querySelectorAll('.lang-option').forEach(o => {
+    o.classList.toggle('sel', o.dataset.lang === l);
+  });
+  document.documentElement.lang = l;
+  // Re-render dynamic content if app is visible
+  if (user) { renderHist(); renderMonthCsvList(); refreshStats(); }
+}
+
+function openLangModal() { document.getElementById('lang-modal').classList.add('open'); }
+function closeLangModal(e) {
+  if (e.target === document.getElementById('lang-modal')) document.getElementById('lang-modal').classList.remove('open');
+}
+function setLangFromModal(l) {
+  setLang(l);
+  document.getElementById('lang-modal').classList.remove('open');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ══════════════════════════════════════════════════════════════════
+const ADMIN = '1234';
+const DEST  = 'mh.maler.gipser@gmail.com';
+const FERIES = new Set(['2026-01-01','2026-01-02','2026-04-03','2026-04-06',
+  '2026-05-01','2026-05-14','2026-05-25','2026-08-01','2026-12-25','2026-12-26']);
+// Always use FR months in CSV (for Excel import compatibility)
+const MOIS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const JOURS_FR = ['Di','Lu','Ma','Me','Je','Ve','Sa'];
+
+// ══════════════════════════════════════════════════════════════════
+//  STORAGE
+// ══════════════════════════════════════════════════════════════════
+const getEmps  = () => { try { return JSON.parse(localStorage.getItem('mh_emps')||'[]'); } catch { return []; } };
+const saveEmps = a  => localStorage.setItem('mh_emps', JSON.stringify(a));
+function empKey(n) { return 'mh_e_'+btoa(unescape(encodeURIComponent(n))).replace(/=/g,''); }
+const getEntries  = n => { try { return JSON.parse(localStorage.getItem(empKey(n))||'[]'); } catch { return []; } };
+const saveEntries = (n,a) => localStorage.setItem(empKey(n), JSON.stringify(a));
+
+// ══════════════════════════════════════════════════════════════════
+//  PIN
+// ══════════════════════════════════════════════════════════════════
+let buf = '', user = null;
+function pinKey(d) {
+  if (buf.length>=4) return;
+  buf+=d; updateDots();
+  if (buf.length===4) setTimeout(checkPin,130);
+}
+function pinDel() { buf=buf.slice(0,-1); updateDots(); document.getElementById('pin-error').textContent=''; }
+function updateDots() { for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('filled',i<buf.length); }
+function checkPin() {
+  if (buf===ADMIN) { buf=''; updateDots(); openAdmin(); return; }
+  const e=getEmps().find(e=>e.pin===buf);
+  if (e) { user=e.name; buf=''; updateDots(); document.getElementById('pin-error').textContent=''; loginOK(); }
+  else {
+    document.getElementById('pin-error').textContent=t('pinErr');
+    buf=''; updateDots();
+    const dots=document.getElementById('pin-dots');
+    dots.style.animation='none'; dots.offsetHeight; dots.style.animation='shake .4s ease';
+  }
+}
+function openAdminPrompt() {
+  const p=prompt(t('adminPin')+' (admin):');
+  if (p===null) return;
+  if (p===ADMIN) openAdmin(); else showToast(t('adminPinErr'),'error');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ADMIN
+// ══════════════════════════════════════════════════════════════════
+function openAdmin() {
+  document.getElementById('screen-pin').style.display='none';
+  document.getElementById('lang-bar').style.display='none';
+  document.getElementById('screen-admin').style.display='flex';
+  renderAdmin();
+}
+function adminBack() {
+  document.getElementById('screen-admin').style.display='none';
+  document.getElementById('screen-pin').style.display='flex';
+  document.getElementById('lang-bar').style.display='flex';
+}
+function renderAdmin() {
+  const emps=getEmps();
+  document.getElementById('emp-count').textContent=emps.length;
+  const div=document.getElementById('admin-emp-list');
+  if (!emps.length) { div.innerHTML=`<p style="color:rgba(255,255,255,.35);font-size:12px;padding:8px 0">${t('noData')}</p>`; return; }
+  div.innerHTML=emps.map((e,i)=>`
+    <div class="emp-row">
+      <div><div class="emp-name">${esc(e.name)}</div><div class="emp-pin">PIN: ${e.pin}</div></div>
+      <button class="btn-del-emp" onclick="adminDel(${i})">${t('deleted')}</button>
+    </div>`).join('');
+}
+function adminAdd() {
+  const name=document.getElementById('new-emp-name').value.trim();
+  const pin=document.getElementById('new-emp-pin').value.trim();
+  if (!name) { showToast(t('nameEmpty'),'error'); return; }
+  if (!/^\d{4}$/.test(pin)) { showToast(t('pinFormat'),'error'); return; }
+  if (pin===ADMIN) { showToast(t('pinAdmin'),'error'); return; }
+  const emps=getEmps();
+  if (emps.find(e=>e.pin===pin)) { showToast(t('pinUsed'),'error'); return; }
+  if (emps.find(e=>e.name===name)) { showToast(t('empExists'),'error'); return; }
+  emps.push({name,pin}); saveEmps(emps);
+  document.getElementById('new-emp-name').value='';
+  document.getElementById('new-emp-pin').value='';
+  renderAdmin(); showToast(name+t('empAdded'),'success');
+}
+function adminDel(i) {
+  if (!confirm(t('confirmDelAll'))) return;
+  const emps=getEmps(); emps.splice(i,1); saveEmps(emps); renderAdmin();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LOGIN / LOGOUT
+// ══════════════════════════════════════════════════════════════════
+function loginOK() {
+  document.getElementById('screen-pin').style.display='none';
+  document.getElementById('lang-bar').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('header-name').textContent=user;
+  const n=new Date();
+  document.getElementById('date-input').value=`${n.getFullYear()}-${S(n.getMonth()+1)}-${S(n.getDate())}`;
+  startClock();
+}
+function logout() {
+  user=null; stopClock();
+  document.getElementById('app').style.display='none';
+  document.getElementById('screen-pin').style.display='flex';
+  document.getElementById('lang-bar').style.display='flex';
+  buf=''; updateDots(); document.getElementById('pin-error').textContent='';
+  clearT();
+  document.getElementById('cmt').value='';
+  document.getElementById('chantier').value='';
+  document.getElementById('km').value='';
+  document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
+  goView('saisie',document.querySelector('.nav-btn'));
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════════════════════════
+let clkInt;
+function startClock() { tick(); clkInt=setInterval(tick,1000); }
+function stopClock()  { clearInterval(clkInt); }
+function tick() {
+  const n=new Date();
+  document.getElementById('clock').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>S(v)).join(':');
+  const days=t('days'); const months=t('months');
+  document.getElementById('clock-date').textContent=`${days[n.getDay()]} ${S(n.getDate())} ${months[n.getMonth()]} ${n.getFullYear()}`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════════════════════════════
+function goView(name,btn) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('main').scrollTop=0;
+  if (name==='historique') renderHist();
+  if (name==='export') { renderMonthCsvList(); refreshStats(); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SAISIE
+// ══════════════════════════════════════════════════════════════════
+let code='';
+function selCode(b) {
+  document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
+  b.classList.add('active'); code=b.dataset.code;
+}
+function t2m(v) { if(!v) return null; const [h,m]=v.split(':').map(Number); return h*60+m; }
+function calc() {
+  let tot=0;
+  for (const [d,f] of [['p1d','p1f'],['p2d','p2f'],['p3d','p3f']]) {
+    const dv=document.getElementById(d).value, fv=document.getElementById(f).value;
+    if (dv&&fv) { const diff=t2m(fv)-t2m(dv); if(diff>0) tot+=diff; }
+  }
+  document.getElementById('result-h').textContent=(tot/60).toFixed(2);
+}
+function setNow(id) { const n=new Date(); document.getElementById(id).value=`${S(n.getHours())}:${S(n.getMinutes())}`; calc(); }
+function pointerNow() {
+  const ids=['p1d','p1f','p2d','p2f','p3d','p3f'];
+  const n=new Date(), v=`${S(n.getHours())}:${S(n.getMinutes())}`;
+  for (const id of ids) { if (!document.getElementById(id).value) { document.getElementById(id).value=v; calc(); showToast(t('saveOk'),'success'); return; } }
+}
+function clearT() {
+  ['p1d','p1f','p2d','p2f','p3d','p3f'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('result-h').textContent='0.00';
+}
+function save() {
+  const date=document.getElementById('date-input').value;
+  if (!date) { showToast(t('noDate'),'error'); return; }
+  const p1d=document.getElementById('p1d').value, p1f=document.getElementById('p1f').value;
+  const p2d=document.getElementById('p2d').value, p2f=document.getElementById('p2f').value;
+  const p3d=document.getElementById('p3d').value, p3f=document.getElementById('p3f').value;
+  const cmt=document.getElementById('cmt').value.trim();
+  const chantier=document.getElementById('chantier').value.trim();
+  const km=parseInt(document.getElementById('km').value)||0;
+  if (!p1d && !code) { showToast(t('noHour'),'error'); return; }
+  let tot=0;
+  for (const [d,f] of [[p1d,p1f],[p2d,p2f],[p3d,p3f]]) { if(d&&f){const diff=t2m(f)-t2m(d);if(diff>0)tot+=diff;} }
+  const entries=getEntries(user);
+  const idx=entries.findIndex(e=>e.date===date);
+  if (idx>=0) { if (!confirm(t('confirmReplace'))) return; entries.splice(idx,1); }
+  entries.push({id:Date.now(),date,p1d,p1f,p2d,p2f,p3d,p3f,h:+(tot/60).toFixed(2),code,cmt,chantier,km,ts:new Date().toISOString()});
+  entries.sort((a,b)=>a.date.localeCompare(b.date));
+  saveEntries(user,entries);
+  clearT();
+  document.getElementById('cmt').value='';
+  document.getElementById('chantier').value='';
+  document.getElementById('km').value='';
+  document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
+  showToast(t('saveOk'),'success');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  HISTORIQUE
+// ══════════════════════════════════════════════════════════════════
+function renderHist() {
+  const entries=getEntries(user), div=document.getElementById('hist-body');
+  const months=t('months'), days=t('days');
+  if (!entries.length) { div.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>${t('noData')}</p></div>`; return; }
+  const byM={};
+  [...entries].reverse().forEach(e=>{const k=e.date.slice(0,7); if(!byM[k]) byM[k]=[]; byM[k].push(e);});
+  let html='';
+  Object.keys(byM).sort().reverse().forEach(mk=>{
+    const [y,m]=mk.split('-');
+    html+=`<div class="hist-month">${months[parseInt(m)-1]} ${y}</div>`;
+    byM[mk].forEach(e=>{
+      const d=new Date(e.date+'T12:00:00'), wd=d.getDay();
+      const isSat=wd===6, isFer=FERIES.has(e.date);
+      const dn=String(d.getDate()).padStart(2,'0');
+      const times=tStr(e);
+      const info=[times, e.chantier?`<b>${esc(e.chantier)}</b>`:'', e.km?`${e.km}km`:'', e.cmt?esc(e.cmt.slice(0,20)):''].filter(Boolean).join(' · ');
+      html+=`<div class="hist-item ${isSat?'sat':isFer?'hol':''}">
+        <div class="date-box"><div class="dn">${dn}</div><div class="dw">${days[wd]}</div></div>
+        <div class="h-info">
+          <div style="font-size:13px;font-weight:600">${e.h>0?e.h.toFixed(2)+'h':e.code||'—'}</div>
+          <div class="h-times">${info||'—'}</div>
+        </div>
+        ${e.code?`<span class="h-code">${e.code}</span>`:'<span></span>'}
+        <div class="h-val ${isSat?'sat':e.h===0?'zero':''}">${e.h>0?e.h.toFixed(2):'—'}</div>
+        <button class="del-btn" onclick="delEntry(${e.id})">✕</button>
+      </div>`;
+    });
+  });
+  div.innerHTML=html;
+}
+function tStr(e) {
+  const p=[];
+  if(e.p1d&&e.p1f) p.push(`${e.p1d}→${e.p1f}`);
+  if(e.p2d&&e.p2f) p.push(`${e.p2d}→${e.p2f}`);
+  if(e.p3d&&e.p3f) p.push(`${e.p3d}→${e.p3f}`);
+  return p.join(' · ')||(e.code?`Code: ${e.code}`:'');
+}
+function delEntry(id) {
+  if (!confirm(t('confirmDel'))) return;
+  saveEntries(user,getEntries(user).filter(e=>e.id!==id));
+  renderHist(); showToast(t('deleted'),'');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  EXPORT — MONTHLY CSV LIST
+// ══════════════════════════════════════════════════════════════════
+function renderMonthCsvList() {
+  const entries = getEntries(user);
+  const months = t('months');
+  const byM = {};
+  entries.forEach(e => {
+    const k = e.date.slice(0,7);
+    if (!byM[k]) byM[k] = [];
+    byM[k].push(e);
+  });
+
+  // Build list for 2026 + any other years present
+  const allYears = new Set(entries.map(e=>e.date.slice(0,4)));
+  if (!allYears.size) allYears.add('2026');
+
+  const rows = [];
+  allYears.forEach(y => {
+    for (let m=0; m<12; m++) {
+      const key = `${y}-${S(m+1)}`;
+      const es = byM[key] || [];
+      rows.push({key, y:parseInt(y), m, es});
+    }
+  });
+  // Sort desc
+  rows.sort((a,b)=>b.key.localeCompare(a.key));
+
+  const container = document.getElementById('month-csv-list');
+  if (!rows.length) { container.innerHTML=`<p class="text-muted">${t('noData')}</p>`; return; }
+
+  container.innerHTML = rows.map(({key,y,m,es}) => {
+    const hasData = es.length > 0;
+    const tot = es.reduce((s,e)=>s+e.h,0);
+    return `<div class="month-csv-row ${hasData?'':'empty-m'}">
+      <div class="month-csv-info">
+        <div class="month-csv-name">${months[m]} ${y}</div>
+        <div class="month-csv-count">${hasData ? `${es.length} ${t('entriesCount')} · ${tot.toFixed(2)}h` : t('emptyMonth')}</div>
+      </div>
+      <button class="btn-dl" onclick="downloadMonthCSV('${key}')" ${hasData?'':'disabled'}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        ${t('dlBtn')}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function refreshStats() {
+  const entries = getEntries(user);
+  const tot = entries.reduce((s,e)=>s+e.h,0);
+  const sat = entries.filter(e=>new Date(e.date+'T12:00:00').getDay()===6).reduce((s,e)=>s+e.h,0);
+  document.getElementById('kJours').textContent = entries.length;
+  document.getElementById('kH').textContent = tot.toFixed(2);
+  document.getElementById('kSat').textContent = sat.toFixed(2);
+  document.getElementById('kVac').textContent = entries.filter(e=>e.code==='V').length;
+}
+
+function buildMonthCSV(yearMonth) {
+  const [y, mStr] = yearMonth.split('-');
+  const m = parseInt(mStr) - 1;
+  const es = getEntries(user).filter(e => e.date.startsWith(yearMonth));
+
+  // Always use FR month names in CSV header (for Excel import script compatibility)
+  const lines = [
+    `## MH_IMPORT_V2`,
+    `## EMPLOYE:${user}`,
+    `## MOIS:${MOIS_FR[m]}`,
+    `## ANNEE:${y}`,
+    `## PERIODE:${yearMonth}`,
+    `## EXPORTE:${new Date().toISOString().slice(0,10)}`,
+    `## LANG:${lang}`,
+    ``,
+    `DATE_ISO,JOUR,DEB1,FIN1,DEB2,FIN2,DEB3,FIN3,HEURES,CODE,CHANTIER,KM,COMMENTAIRE`,
+  ];
+
+  let tot=0, sat=0, vac=0, mal=0, acc=0;
+  es.forEach(e => {
+    const d = new Date(e.date+'T12:00:00'), wd = d.getDay();
+    lines.push([
+      e.date, JOURS_FR[wd],
+      e.p1d||'', e.p1f||'',
+      e.p2d||'', e.p2f||'',
+      e.p3d||'', e.p3f||'',
+      e.h.toFixed(2), e.code||'',
+      (e.chantier||'').replace(/[,\n\r]/g,' '),
+      e.km||0,
+      (e.cmt||'').replace(/[,\n\r]/g,' ')
+    ].join(','));
+    tot+=e.h;
+    if (wd===6) sat+=e.h;
+    if (e.code==='V') vac++;
+    if (e.code==='M') mal++;
+    if (e.code==='A') acc++;
+  });
+
+  lines.push('',
+    `## RECAP_TOTAL:${tot.toFixed(2)}`,
+    `## RECAP_SAMEDIS:${sat.toFixed(2)}`,
+    `## RECAP_VACANCES:${vac}`,
+    `## RECAP_MALADIE:${mal}`,
+    `## RECAP_ACCIDENT:${acc}`
+  );
+
+  const empSlug = user.replace(/\s+/g,'_').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const moisSlug = MOIS_FR[m].normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return {
+    csv: '\uFEFF' + lines.join('\r\n'),
+    fname: `MH_Import_${empSlug}_${moisSlug}_${y}.csv`,
+    total: tot, count: es.length
+  };
+}
+
+async function downloadMonthCSV(yearMonth) {
+  const es = getEntries(user).filter(e => e.date.startsWith(yearMonth));
+  if (!es.length) { showToast(t('noDataMonth'), 'error'); return; }
+
+  const {csv, fname} = buildMonthCSV(yearMonth);
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const file = new File([blob], fname, {type:'text/csv'});
+
+  if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+    try { await navigator.share({files:[file], title:fname}); showToast(t('sharedOk'),'success'); return; }
+    catch(e) { if (e.name!=='AbortError') console.warn(e); }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), {href:url, download:fname});
+  a.click(); URL.revokeObjectURL(url);
+  showToast(t('downloaded'), 'success');
+}
+
+async function exportAll() {
+  const entries = getEntries(user);
+  if (!entries.length) { showToast(t('noData'),'error'); return; }
+  const months = [...new Set(entries.map(e=>e.date.slice(0,7)))];
+  let count = 0;
+  for (const ym of months) {
+    await new Promise(res => setTimeout(res, 400)); // stagger downloads
+    await downloadMonthCSV(ym);
+    count++;
+  }
+  showToast(`${t('exportAllDone')} (${count})`, 'success');
+}
+
+function clearAllData() {
+  if (!confirm(t('confirmDelAll'))) return;
+  saveEntries(user, []);
+  renderHist(); renderMonthCsvList(); refreshStats();
+  showToast(t('dataCleared'), '');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════════════════
+const S   = n => String(n).padStart(2,'0');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let toastT;
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'toast show' + (type?' '+type:'');
+  clearTimeout(toastT); toastT = setTimeout(()=>{el.className='toast';}, 3000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════════
+setLang(lang, false); // Apply saved lang on load
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+</body>
+</html>
