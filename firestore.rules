@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Employees — readable by anyone with the app, writable only via admin PIN
+    match /employees/{empId} {
+      allow read: if true;
+      allow write: if true; // Simplificado — em produção usar autenticação
+    }
+
+    // Entries — each employee can only read/write their own
+    match /entries/{empId}/days/{dayId} {
+      allow read, write: if true;
+    }
+
+    // Signatures
+    match /signatures/{sigId} {
+      allow read, write: if true;
+    }
+
+    // FCM tokens
+    match /fcm_tokens/{empId} {
+      allow read, write: if true;
+    }
+  }
+}

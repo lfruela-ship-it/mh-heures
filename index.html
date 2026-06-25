@@ -4,11 +4,171 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Gestion des Heures">
-<meta name="theme-color" content="#1F3864">
+<meta name="theme-color" content="#D6E4F0">
 <link rel="manifest" href="manifest.json">
 <title>Gestion des Heures</title>
+
+<!-- Firebase v10 SDK -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, doc, collection, setDoc, getDoc, getDocs, deleteDoc,
+         onSnapshot, query, orderBy, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getMessaging, getToken, onMessage }
+  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js';
+
+// ══════════════════════════════════════════════════════════════════
+// FIREBASE CONFIG — remplacer par votre config Firebase
+// ══════════════════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBPrGxLbS2MS9_CcsdQcOsLlD6VIz6oA6A",
+  authDomain:        "mh-gestion-heures.firebaseapp.com",
+  projectId:         "mh-gestion-heures",
+  storageBucket:     "mh-gestion-heures.firebasestorage.app",
+  messagingSenderId: "561119942621",
+  appId:             "1:561119942621:web:d09bf4d3f1f3cb8b754834",
+  measurementId:     "G-QD32R9F4ZJ"
+};
+
+const FIREBASE_READY = FIREBASE_CONFIG.apiKey !== "VOTRE_API_KEY";
+
+let app, db, messaging;
+if (FIREBASE_READY) {
+  app       = initializeApp(FIREBASE_CONFIG);
+  db        = getFirestore(app);
+  try { messaging = getMessaging(app); } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STORAGE LAYER — Firebase si configurado, localStorage fallback
+// ══════════════════════════════════════════════════════════════════
+window.DB = {
+  ready: FIREBASE_READY,
+
+  // ── Employees ──────────────────────────────────────────────────
+  async getEmployees() {
+    if (!FIREBASE_READY) {
+      try { return JSON.parse(localStorage.getItem('mh_emps')||'[]'); } catch { return []; }
+    }
+    const snap = await getDocs(collection(db, 'employees'));
+    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  },
+
+  async saveEmployee(emp) {
+    if (!FIREBASE_READY) {
+      const emps = await this.getEmployees();
+      const idx = emps.findIndex(e => e.pin === emp.pin);
+      if (idx >= 0) emps[idx] = emp; else emps.push(emp);
+      localStorage.setItem('mh_emps', JSON.stringify(emps));
+      return;
+    }
+    const id = btoa(emp.name).replace(/=/g,'');
+    await setDoc(doc(db, 'employees', id), {...emp, updatedAt: serverTimestamp()});
+  },
+
+  async deleteEmployee(name) {
+    if (!FIREBASE_READY) {
+      const emps = await this.getEmployees();
+      localStorage.setItem('mh_emps', JSON.stringify(emps.filter(e=>e.name!==name)));
+      return;
+    }
+    const id = btoa(name).replace(/=/g,'');
+    await deleteDoc(doc(db, 'employees', id));
+  },
+
+  // ── Entries ────────────────────────────────────────────────────
+  empKey(name) {
+    return btoa(unescape(encodeURIComponent(name))).replace(/=/g,'');
+  },
+
+  async getEntries(name) {
+    if (!FIREBASE_READY) {
+      try { return JSON.parse(localStorage.getItem('mh_e_'+this.empKey(name))||'[]'); }
+      catch { return []; }
+    }
+    const empId = this.empKey(name);
+    const snap = await getDocs(
+      query(collection(db, 'entries', empId, 'days'), orderBy('date'))
+    );
+    return snap.docs.map(d => d.data());
+  },
+
+  async saveEntry(name, entry) {
+    if (!FIREBASE_READY) {
+      const entries = await this.getEntries(name);
+      const idx = entries.findIndex(e => e.date === entry.date);
+      if (idx >= 0) entries[idx] = entry; else entries.push(entry);
+      entries.sort((a,b) => a.date.localeCompare(b.date));
+      localStorage.setItem('mh_e_'+this.empKey(name), JSON.stringify(entries));
+      return;
+    }
+    const empId = this.empKey(name);
+    await setDoc(
+      doc(db, 'entries', empId, 'days', entry.date),
+      {...entry, syncedAt: serverTimestamp()}
+    );
+  },
+
+  async deleteEntry(name, date) {
+    if (!FIREBASE_READY) {
+      const entries = await this.getEntries(name);
+      localStorage.setItem('mh_e_'+this.empKey(name),
+        JSON.stringify(entries.filter(e=>e.date!==date)));
+      return;
+    }
+    const empId = this.empKey(name);
+    await deleteDoc(doc(db, 'entries', empId, 'days', date));
+  },
+
+  async saveSignature(name, yearMonth, sigData) {
+    if (!FIREBASE_READY) {
+      localStorage.setItem(`mh_sig_${this.empKey(name)}_${yearMonth}`, sigData);
+      return;
+    }
+    const empId = this.empKey(name);
+    await setDoc(doc(db, 'signatures', `${empId}_${yearMonth}`), {
+      employee: name, yearMonth, sigData,
+      signedAt: serverTimestamp()
+    });
+  },
+
+  async getSignature(name, yearMonth) {
+    if (!FIREBASE_READY) {
+      return localStorage.getItem(`mh_sig_${this.empKey(name)}_${yearMonth}`);
+    }
+    const empId = this.empKey(name);
+    const snap = await getDoc(doc(db, 'signatures', `${empId}_${yearMonth}`));
+    return snap.exists() ? snap.data().sigData : null;
+  },
+
+  // ── Admin realtime listener ─────────────────────────────────────
+  listenAllEntries(callback) {
+    if (!FIREBASE_READY) return () => {};
+    return onSnapshot(collection(db, 'entries'), callback);
+  }
+};
+
+// ── Notifications (FCM) ────────────────────────────────────────────
+window.FCM = {
+  async requestPermission() {
+    if (!messaging) return null;
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return null;
+      const token = await getToken(messaging, {
+        vapidKey: 'VOTRE_VAPID_KEY'
+      });
+      return token;
+    } catch(e) { return null; }
+  }
+};
+
+window.FIREBASE_READY = FIREBASE_READY;
+window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -21,18 +181,22 @@ html,body{height:100%;overflow:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100dvh}
 
-/* ── LANG PICKER ── */
+/* ── LANG BAR ── */
 #lang-bar{position:absolute;top:14px;right:14px;display:flex;gap:6px;z-index:1100}
 .lang-btn{border:none;background:rgba(255,255,255,.5);color:var(--navy);
-  border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;
-  transition:.15s;letter-spacing:.3px}
-.lang-btn:active,.lang-btn.active{background:var(--orange);color:#fff}
+  border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
+.lang-btn.active{background:var(--orange);color:#fff}
+
+/* ── FIREBASE BANNER ── */
+#fb-banner{position:fixed;top:0;left:0;right:0;z-index:2000;background:var(--amber);
+  color:#fff;font-size:12px;font-weight:700;text-align:center;padding:8px 16px;
+  display:none;cursor:pointer}
+#fb-banner.show{display:block}
 
 /* ── PIN ── */
 #screen-pin{position:fixed;inset:0;z-index:1000;background:#D6E4F0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
 .pin-logo{width:min(200px,55vw);max-width:55%;margin-bottom:16px;}
-
 .pin-title{font-size:22px;font-weight:300;color:var(--navy);margin-bottom:22px;text-align:center}
 .pin-dots{display:flex;gap:14px;margin-bottom:24px}
 .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid rgba(31,56,100,.25);transition:.15s}
@@ -45,7 +209,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .pin-key:active{background:rgba(255,255,255,.9);transform:scale(.92)}
 .pin-key.del{background:transparent;font-size:18px}
 .pin-key.gear{background:rgba(255,255,255,.4);font-size:16px}
-.pin-error{color:var(--orange);font-size:12px;font-weight:600;text-align:center;min-height:16px;margin-top:2px}
+.pin-error{color:var(--red);font-size:12px;font-weight:600;text-align:center;min-height:16px;margin-top:2px}
+.cloud-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;
+  margin-top:10px;display:inline-block}
+.cloud-on{background:#E8F5E9;color:var(--green)}
+.cloud-off{background:#FFF3E0;color:var(--amber)}
 
 /* ── ADMIN ── */
 #screen-admin{position:fixed;inset:0;z-index:999;background:#fff;
@@ -55,12 +223,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .admin-card{background:#F7FBFF;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
 .admin-card-title{font-size:10px;font-weight:700;letter-spacing:.8px;
   color:var(--muted);text-transform:uppercase;margin-bottom:12px}
-.admin-lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);
-  margin-bottom:4px;margin-top:10px}
+.admin-lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;margin-top:10px}
 .admin-lbl:first-child{margin-top:0}
-.admin-inp{width:100%;height:46px;background:#fff;
-  border:1.5px solid var(--border);border-radius:10px;padding:0 14px;
-  font-size:16px;color:var(--text);outline:none;-webkit-appearance:none}
+.admin-inp{width:100%;height:46px;background:#fff;border:1.5px solid var(--border);
+  border-radius:10px;padding:0 14px;font-size:16px;color:var(--text);outline:none;-webkit-appearance:none}
 .admin-inp:focus{border-color:var(--blue)}
 .admin-inp.pin-inp{letter-spacing:4px;font-size:20px;text-align:center;font-weight:700}
 .btn-admin-add{width:100%;height:46px;border-radius:10px;border:none;
@@ -70,34 +236,51 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .emp-row:last-child{border-bottom:none}
 .emp-name{font-size:13px;font-weight:600;color:var(--text)}
 .emp-pin{font-size:10px;color:var(--muted);margin-top:2px}
-.btn-del-emp{background:rgba(230,57,70,.2);border:none;color:var(--red);
+.btn-del-emp{background:rgba(230,57,70,.1);border:none;color:var(--red);
   border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
 .btn-admin-back{width:100%;height:46px;border-radius:10px;
   border:1.5px solid var(--border);background:transparent;
   color:var(--navy);font-size:14px;font-weight:600;cursor:pointer;margin-top:6px}
 .admin-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
 
+/* ── ADMIN DASHBOARD ── */
+.dash-emp-card{background:var(--card);border-radius:12px;padding:13px 14px;
+  margin-bottom:8px;box-shadow:var(--shadow)}
+.dash-emp-name{font-size:13px;font-weight:700;color:var(--navy)}
+.dash-emp-stats{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.dash-stat{font-size:10px;background:var(--bg);border-radius:6px;padding:3px 8px;color:var(--muted);font-weight:600}
+.dash-stat.orange{background:#FFF3E0;color:var(--orange)}
+.dash-stat.green{background:#E8F5E9;color:var(--green)}
+.dash-stat.red{background:#FFEBEE;color:var(--red)}
+.dash-month-sel{width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;
+  padding:0 12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:12px;
+  -webkit-appearance:none;outline:none}
+
 /* ── APP ── */
 #app{display:none;flex-direction:column;height:100dvh}
-.app-header{background:#fff;color:var(--text);padding:10px 16px 8px;flex-shrink:0;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.app-header{background:#fff;color:var(--text);padding:10px 16px 8px;flex-shrink:0;
+  border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.header-left{display:flex;align-items:center;gap:8px}
 .header-emp{font-size:12px;font-weight:700;color:var(--navy)}
 .header-right{display:flex;gap:6px;align-items:center}
 .btn-logout{background:var(--bg);border:none;color:var(--navy);
   border-radius:8px;padding:5px 11px;font-size:10px;font-weight:700;cursor:pointer}
 .btn-lang-sm{background:var(--bg);border:none;color:var(--navy);
   border-radius:8px;padding:5px 8px;font-size:10px;font-weight:700;cursor:pointer}
+.header-icon{width:32px;height:32px;border-radius:50%;background:var(--bg);
+  padding:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.header-icon svg{width:26px;height:26px}
 .clock{font-size:30px;font-weight:300;letter-spacing:2px;
   font-variant-numeric:tabular-nums;text-align:center;color:var(--navy)}
 .clock-date{font-size:11px;text-align:center;color:var(--muted);margin-top:1px}
-.main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
-  padding:12px 14px 86px}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 14px 86px}
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);
   border-top:1px solid var(--border);display:flex;
   padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 12px rgba(0,0,0,.07);z-index:100}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;
   justify-content:center;padding:10px 4px 8px;border:none;background:transparent;
-  color:var(--muted);font-size:10px;font-weight:600;letter-spacing:.2px;cursor:pointer;gap:3px}
+  color:var(--muted);font-size:10px;font-weight:600;cursor:pointer;gap:3px}
 .nav-btn.active{color:var(--blue)}
 .nav-btn svg{width:21px;height:21px}
 .view{display:none}.view.active{display:block}
@@ -113,8 +296,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   text-align:center;margin-bottom:14px;text-transform:uppercase;letter-spacing:.6px}
 .lang-option{display:flex;align-items:center;gap:14px;padding:13px 12px;
   border-radius:12px;cursor:pointer;transition:.15s;margin-bottom:4px}
-.lang-option:active,.lang-option.sel{background:var(--bg)}
-.lang-option.sel .lang-flag{box-shadow:0 0 0 2px var(--blue)}
+.lang-option.sel{background:var(--bg)}
 .lang-flag{font-size:26px;width:36px;text-align:center;flex-shrink:0}
 .lang-name{font-size:15px;font-weight:600;color:var(--text)}
 .lang-native{font-size:12px;color:var(--muted)}
@@ -131,9 +313,8 @@ label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bot
 select,input[type="time"],input[type="date"]{width:100%;height:46px;
   border:1.5px solid var(--border);border-radius:10px;padding:0 13px;
   font-size:16px;font-family:inherit;color:var(--text);background:#fff;
-  -webkit-appearance:none;outline:none;transition:border-color .2s;
-  font-variant-numeric:tabular-nums}
-select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,93,158,.1)}
+  -webkit-appearance:none;outline:none;transition:border-color .2s}
+select:focus,input:focus{border-color:var(--blue)}
 textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;
   padding:11px 13px;font-size:15px;font-family:inherit;resize:none;
   outline:none;color:var(--text);height:66px;transition:border-color .2s}
@@ -149,10 +330,10 @@ textarea:focus{border-color:var(--blue)}
 /* ── TIME PERIODS ── */
 .periode-row{display:grid;grid-template-columns:1fr 16px 1fr 42px;
   gap:5px;align-items:center;margin-bottom:7px}
-.sep{font-size:14px;color:var(--muted);text-align:center;font-weight:300}
+.sep{font-size:14px;color:var(--muted);text-align:center}
 .btn-now{height:46px;border:none;border-radius:10px;background:var(--navy);
   color:#fff;font-size:9px;font-weight:700;cursor:pointer;display:flex;
-  flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 3px;transition:.15s}
+  flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:.15s}
 .btn-now:active{background:var(--blue);transform:scale(.94)}
 .btn-now svg{width:13px;height:13px}
 
@@ -165,15 +346,14 @@ textarea:focus{border-color:var(--blue)}
 .code-chip span{font-size:8px;font-weight:600;color:var(--muted)}
 .code-chip.active{border-color:var(--blue);background:var(--blue);color:#fff}
 .code-chip.active span{color:rgba(255,255,255,.7)}
-.code-chip:active{transform:scale(.93)}
 
-/* ── CHANTIER FIELD ── */
+/* ── CHANTIER ── */
 .chantier-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px}
 
 /* ── BUTTONS ── */
 .btn{width:100%;height:52px;border:none;border-radius:12px;font-size:15px;
   font-weight:700;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;gap:7px;transition:.15s;letter-spacing:.2px}
+  justify-content:center;gap:7px;transition:.15s}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--navy);color:#fff}
 .btn-green{background:var(--green);color:#fff}
@@ -185,6 +365,15 @@ textarea:focus{border-color:var(--blue)}
 .divider{height:1px;background:var(--border);margin:13px 0}
 .mt-8{margin-top:8px}.mt-12{margin-top:12px}
 .text-muted{color:var(--muted);font-size:12px;line-height:1.5}
+
+/* ── SIGNATURE ── */
+.sig-box{border:2px dashed var(--border);border-radius:12px;overflow:hidden;
+  background:#FAFAFA;margin-bottom:10px;position:relative}
+.sig-canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+.sig-placeholder{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--muted);font-size:13px;pointer-events:none}
+.sig-signed{background:#E8F5E9;border-color:var(--green);border-style:solid}
+.sig-signed .sig-placeholder{color:var(--green);font-weight:700}
 
 /* ── HISTORY ── */
 .hist-month{font-size:11px;font-weight:700;color:var(--navy);
@@ -200,64 +389,57 @@ textarea:focus{border-color:var(--blue)}
 .date-box .dw{font-size:9px;color:var(--muted);font-weight:600}
 .h-info .h-times{font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
 .h-code{font-size:9px;font-weight:700;background:var(--blue);color:#fff;
-  border-radius:5px;padding:2px 5px;white-space:nowrap}
+  border-radius:5px;padding:2px 5px}
 .h-val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;
-  color:var(--navy);white-space:nowrap;text-align:right}
+  color:var(--navy);text-align:right}
 .h-val.sat{color:#2D7A2D}.h-val.zero{color:var(--muted);font-size:13px}
-.del-btn{background:none;border:none;color:var(--muted);font-size:16px;
-  cursor:pointer;padding:2px 4px;border-radius:5px}
+.del-btn{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 4px;border-radius:5px}
 .del-btn:active{background:var(--red);color:#fff}
 .empty{text-align:center;padding:44px 20px;color:var(--muted)}
-.empty svg{opacity:.25;margin-bottom:10px}
 
-/* ── EXPORT KPIs ── */
+/* ── EXPORT ── */
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px}
-.kpi-box{background:var(--card);border-radius:12px;padding:13px 11px;
-  box-shadow:var(--shadow);text-align:center}
+.kpi-box{background:var(--card);border-radius:12px;padding:13px 11px;box-shadow:var(--shadow);text-align:center}
 .kpi-val{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy)}
 .kpi-val.orange{color:var(--orange)}.kpi-val.green{color:var(--green)}
-.kpi-val.red{color:var(--red)}
-.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px}
-
-/* ── MONTHLY CSV LIST ── */
 .month-csv-list{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
 .month-csv-row{background:var(--card);border-radius:12px;padding:11px 14px;
   box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .month-csv-row.empty-m{opacity:.45}
 .month-csv-info{flex:1}
-.month-csv-name{font-size:13px;font-weight:700;color:var(--text)}
+.month-csv-name{font-size:13px;font-weight:700}
 .month-csv-count{font-size:11px;color:var(--muted);margin-top:2px}
 .btn-dl{height:34px;border:none;border-radius:9px;background:var(--green);
   color:#fff;font-size:11px;font-weight:700;padding:0 12px;cursor:pointer;
   display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
 .btn-dl:disabled{background:var(--border);color:var(--muted);cursor:default}
-.btn-dl svg{width:13px;height:13px}
+
+/* ── SYNC STATUS ── */
+.sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.sync-dot.ok{background:var(--green)}.sync-dot.off{background:var(--amber)}.sync-dot.err{background:var(--red)}
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:86px;left:14px;right:14px;background:var(--text);
   color:#fff;padding:13px 16px;border-radius:12px;font-size:13px;font-weight:600;
-  text-align:center;z-index:9999;transform:translateY(20px);opacity:0;
-  transition:.3s;pointer-events:none}
+  text-align:center;z-index:9999;transform:translateY(20px);opacity:0;transition:.3s;pointer-events:none}
 .toast.show{transform:translateY(0);opacity:1}
-.toast.success{background:var(--green)}.toast.error{background:var(--red)}
-.toast.info{background:var(--blue)}
-
-/* ── BADGE ── */
-.badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;
-  border-radius:20px;margin-left:4px;vertical-align:middle}
-.badge-orange{background:var(--orange);color:#fff}
+.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.info{background:var(--blue)}
 
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}
   40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
-
-.header-icon{width:32px;height:32px;border-radius:50%;
-  background:#fff;padding:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.header-icon svg{width:26px;height:26px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:20px;height:20px;border:3px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
 </style>
 </head>
 <body>
 
-<!-- ══ LANG PICKER (PIN screen) ══ -->
+<!-- Firebase not configured banner -->
+<div id="fb-banner" onclick="document.getElementById('fb-banner').classList.remove('show')">
+  ☁️ Mode hors-ligne — configurez Firebase pour synchroniser les données. Cliquez pour fermer.
+</div>
+
+<!-- Lang bar -->
 <div id="lang-bar">
   <button class="lang-btn active" onclick="setLang('fr')">FR</button>
   <button class="lang-btn" onclick="setLang('pt')">PT</button>
@@ -268,6 +450,7 @@ textarea:focus{border-color:var(--blue)}
 
 <!-- ══ PIN ══ -->
 <div id="screen-pin">
+  <!-- LOGO ENTREPRISE (Logo_graver_completo.svg) -->
   <svg class="pin-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 75923.37 28132.7" aria-label="MH Maler &amp; Gipser AG"><defs>
   <style type="text/css">
    <![CDATA[
@@ -491,25 +674,65 @@ textarea:focus{border-color:var(--blue)}
     <button class="pin-key del" onclick="pinDel()">⌫</button>
   </div>
   <div class="pin-error" id="pin-error"></div>
+  <div id="cloud-status"></div>
 </div>
 
 <!-- ══ ADMIN ══ -->
 <div id="screen-admin">
   <div class="admin-title">⚙ <span data-i18n="adminTitle">Configuration</span></div>
-  <div class="admin-sub" data-i18n="adminSub">Accès patron — gérez les employés et PINs</div>
-  <div class="admin-card">
-    <div class="admin-card-title" data-i18n="adminAdd">Ajouter un employé</div>
-    <label class="admin-lbl" data-i18n="adminName">Prénom et Nom</label>
-    <input class="admin-inp" type="text" id="new-emp-name" maxlength="40">
-    <label class="admin-lbl" data-i18n="adminPin">PIN personnel (4 chiffres)</label>
-    <input class="admin-inp pin-inp" type="tel" id="new-emp-pin" placeholder="1234" maxlength="4">
-    <button class="btn-admin-add" onclick="adminAdd()" data-i18n="adminAddBtn">+ Ajouter l'employé</button>
-    <p class="admin-note" data-i18n="adminNote">⚠ PIN unique par employé. Communiquez-le en privé.</p>
+  <div class="admin-sub" data-i18n="adminSub">Accès patron</div>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn btn-primary btn-sm" onclick="adminTab('employees')" id="tab-emp" style="flex:1">👥 <span data-i18n="adminTeam">Équipe</span></button>
+    <button class="btn btn-outline btn-sm" onclick="adminTab('dashboard')" id="tab-dash" style="flex:1">📊 Dashboard</button>
+    <button class="btn btn-outline btn-sm" onclick="adminTab('notif')" id="tab-notif" style="flex:1">🔔 <span data-i18n="navNotif">Notif.</span></button>
   </div>
-  <div class="admin-card">
-    <div class="admin-card-title"><span data-i18n="adminTeam">Équipe</span> (<span id="emp-count">0</span>)</div>
-    <div id="admin-emp-list"></div>
+
+  <!-- TAB: Employees -->
+  <div id="admin-tab-employees">
+    <div class="admin-card">
+      <div class="admin-card-title" data-i18n="adminAdd">Ajouter un employé</div>
+      <label class="admin-lbl" data-i18n="adminName">Prénom et Nom</label>
+      <input class="admin-inp" type="text" id="new-emp-name" maxlength="40">
+      <label class="admin-lbl" data-i18n="adminPin">PIN (4 chiffres)</label>
+      <input class="admin-inp pin-inp" type="tel" id="new-emp-pin" placeholder="1234" maxlength="4">
+      <button class="btn-admin-add" onclick="adminAdd()" data-i18n="adminAddBtn">+ Ajouter</button>
+      <p class="admin-note" data-i18n="adminNote">⚠ PIN unique par employé.</p>
+    </div>
+    <div class="admin-card">
+      <div class="admin-card-title"><span data-i18n="adminTeam">Équipe</span> (<span id="emp-count">0</span>)</div>
+      <div id="admin-emp-list"></div>
+    </div>
   </div>
+
+  <!-- TAB: Dashboard -->
+  <div id="admin-tab-dashboard" style="display:none">
+    <div class="admin-card">
+      <div class="admin-card-title">Vue d'ensemble — <span data-i18n="navExport">Export</span></div>
+      <select class="dash-month-sel" id="dash-month-sel" onchange="loadDashboard()"></select>
+      <div id="dashboard-body"><p class="text-muted">Chargement…</p></div>
+    </div>
+  </div>
+
+  <!-- TAB: Notifications -->
+  <div id="admin-tab-notif" style="display:none">
+    <div class="admin-card">
+      <div class="admin-card-title">🔔 Notifications push</div>
+      <p class="text-muted" style="margin-bottom:12px">
+        Envie un rappel automatique à tous les employés qui n'ont pas rempli leurs heures.
+      </p>
+      <button class="btn btn-orange" onclick="sendReminders()" style="margin-bottom:10px">
+        📲 Envoyer rappel à tous
+      </button>
+      <div id="notif-status" class="text-muted"></div>
+      <div class="divider"></div>
+      <p class="text-muted" style="margin-bottom:8px;font-size:11px">
+        Pour activer les notifications, chaque employé doit ouvrir l'app et autorizar quando solicitado.
+      </p>
+    </div>
+  </div>
+
   <button class="btn-admin-back" onclick="adminBack()" data-i18n="adminBack">← Retour</button>
 </div>
 
@@ -517,11 +740,20 @@ textarea:focus{border-color:var(--blue)}
 <div id="app">
   <header class="app-header">
     <div class="header-top">
-      <div class="header-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17496.13 17451.13"><defs><style>.ic-fil0{fill:#1F3864}.ic-str0{stroke:#1F3864;stroke-width:7.25;stroke-miterlimit:22.9256}</style></defs><g id="Plan_x0020_1"><metadata id="CorelCorpID_0Corel-Layer"/><g id="_2126445546176"><path class="ic-fil0 ic-str0" d="M10440.68 15589.99l-75.2 37.45 -655.93 119.51 -5.62 -6119.31 2051.05 -1.31 1.47 5481.83c-176.58,154.21 -1019.34,449.92 -1315.77,481.84zm5032.35 -4529.74l-29.79 53.69c-195.91,800.77 -1314.35,2497.81 -1845.15,2781.12l-7.61 -10322.9c134.73,49.06 86.87,15.86 185.69,148.9l50.19 35.66c156.95,157.56 294.51,328.18 435.69,516.99l46.53 34.98c149.09,212.55 292.28,399.01 453.99,643.31 429.08,648.23 770.86,1501.98 942.13,2297.15 345.97,1606.25 126.11,2388.73 -231.66,3811.09zm-8864.56 -10792.18l-73.9 38.04 -416.97 97.07 -55.34 46.27 -465.29 156.57c114.81,487.38 434.24,1018.33 525.98,1507.68 474.48,-84.51 944.55,-338.68 1689.74,-404.98 -42.06,2324.03 12.53,4685.67 4.53,7015.88 -2.98,867.2 51.52,6358.91 -10.19,7026.7l-763.84 -132.55 -0.22 1663.25 384.84 68.75 118.39 35.72c696.08,15.1 1259.83,107.21 1990.84,31.59 1771.04,-183.24 3212.55,-748.1 4546.6,-1769.91 4644.03,-3557.06 4523.63,-10537.79 -232.15,-13994.96 -401.29,-291.72 -829.95,-551.03 -1313.67,-791.46 -309.17,-153.67 -1213.14,-534.53 -1577.79,-559.4l-3.06 1659.17c230.94,151.2 572.26,179.4 796.2,345.06l8.33 5485.04 -2056.08 -2.11 -3.17 -7721.54c-389.81,-90.04 -1191.6,-68.87 -1610.86,-36.38 -542.39,42.02 -1005.02,182.98 -1482.92,236.51z"/><path class="ic-fil0 ic-str0" d="M1987.18 6562.26l28.87 -57.97c174.79,-661.68 829.34,-1835.44 1297,-2316.51 135.12,-139 417.19,-517.97 590.09,-600.14l19.76 10323.14c-170.98,-82.46 -522.69,-511.98 -645.3,-648.52 -514.6,-573.04 -1086.3,-1631.64 -1306.13,-2420.13 -327.83,-1175.82 -419.45,-2061.84 -221.23,-3284.22 59.4,-366.34 156.93,-658.12 236.95,-995.65zm-1421.07 -921.72l-28.9 58.14c-121.27,452.62 -344.64,961.05 -382.9,1464.05l-33.13 86.18c-15.75,340.33 -87.41,700.09 -105.94,1060.98 -119.89,2334.25 694.6,4391.55 2100.93,6108.5l46.78 34.88c127.56,132.48 219.69,261.67 351.4,401.14 145.09,153.65 255.95,219.27 404.06,355.68 587.34,540.9 2061.8,1571.35 2819.75,1693.08 0.33,-1622.18 2.5,-3243.99 4.04,-4866.02 0.69,-734.54 51.18,-4375.29 -19.46,-4784.37 112.7,75.95 537.57,851.28 607.21,1021.09l39.56 38.68c154.14,282.3 330.6,546.31 470.36,831.13 122.03,-81.24 409.2,-702.37 485.8,-839.31 289.39,-517.39 384.76,-581.85 267.08,-838.96 -135.48,-296.02 -256.58,-620.87 -379.45,-933.01 -113.2,-287.61 -274.57,-611.72 -365.15,-905.88l-32.13 -47.52c-123.66,-474.43 -1675.64,-4021.36 -1854.29,-4698.85 -366.95,91.74 -1181.32,684.13 -1453.24,880.02 -490.5,353.37 -821.21,699.64 -1196.87,1081.8 -586.16,596.29 -1523.33,1980.63 -1745.5,2798.58z"/></g></g></svg></div>
-      <div class="header-emp" id="header-name">—</div>
+      <div class="header-left">
+        <div class="header-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17496.13 17451.13"><defs><style>.ic-fil0{fill:#1F3864}.ic-str0{stroke:#1F3864;stroke-width:7.25;stroke-miterlimit:22.9256}</style></defs><g id="Plan_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <g id="_2126445546176">
+   <path class="ic-fil0 ic-str0" d="M10440.68 15589.99l-75.2 37.45 -655.93 119.51 -5.62 -6119.31 2051.05 -1.31 1.47 5481.83c-176.58,154.21 -1019.34,449.92 -1315.77,481.84zm5032.35 -4529.74l-29.79 53.69c-195.91,800.77 -1314.35,2497.81 -1845.15,2781.12l-7.61 -10322.9c134.73,49.06 86.87,15.86 185.69,148.9l50.19 35.66c156.95,157.56 294.51,328.18 435.69,516.99l46.53 34.98c149.09,212.55 292.28,399.01 453.99,643.31 429.08,648.23 770.86,1501.98 942.13,2297.15 345.97,1606.25 126.11,2388.73 -231.66,3811.09zm-8864.56 -10792.18l-73.9 38.04 -416.97 97.07 -55.34 46.27 -465.29 156.57c114.81,487.38 434.24,1018.33 525.98,1507.68 474.48,-84.51 944.55,-338.68 1689.74,-404.98 -42.06,2324.03 12.53,4685.67 4.53,7015.88 -2.98,867.2 51.52,6358.91 -10.19,7026.7l-763.84 -132.55 -0.22 1663.25 384.84 68.75 118.39 35.72c696.08,15.1 1259.83,107.21 1990.84,31.59 1771.04,-183.24 3212.55,-748.1 4546.6,-1769.91 4644.03,-3557.06 4523.63,-10537.79 -232.15,-13994.96 -401.29,-291.72 -829.95,-551.03 -1313.67,-791.46 -309.17,-153.67 -1213.14,-534.53 -1577.79,-559.4l-3.06 1659.17c230.94,151.2 572.26,179.4 796.2,345.06l8.33 5485.04 -2056.08 -2.11 -3.17 -7721.54c-389.81,-90.04 -1191.6,-68.87 -1610.86,-36.38 -542.39,42.02 -1005.02,182.98 -1482.92,236.51z"/>
+   <path class="ic-fil0 ic-str0" d="M1987.18 6562.26l28.87 -57.97c174.79,-661.68 829.34,-1835.44 1297,-2316.51 135.12,-139 417.19,-517.97 590.09,-600.14l19.76 10323.14c-170.98,-82.46 -522.69,-511.98 -645.3,-648.52 -514.6,-573.04 -1086.3,-1631.64 -1306.13,-2420.13 -327.83,-1175.82 -419.45,-2061.84 -221.23,-3284.22 59.4,-366.34 156.93,-658.12 236.95,-995.65zm-1421.07 -921.72l-28.9 58.14c-121.27,452.62 -344.64,961.05 -382.9,1464.05l-33.13 86.18c-15.75,340.33 -87.41,700.09 -105.94,1060.98 -119.89,2334.25 694.6,4391.55 2100.93,6108.5l46.78 34.88c127.56,132.48 219.69,261.67 351.4,401.14 145.09,153.65 255.95,219.27 404.06,355.68 587.34,540.9 2061.8,1571.35 2819.75,1693.08 0.33,-1622.18 2.5,-3243.99 4.04,-4866.02 0.69,-734.54 51.18,-4375.29 -19.46,-4784.37 112.7,75.95 537.57,851.28 607.21,1021.09l39.56 38.68c154.14,282.3 330.6,546.31 470.36,831.13 122.03,-81.24 409.2,-702.37 485.8,-839.31 289.39,-517.39 384.76,-581.85 267.08,-838.96 -135.48,-296.02 -256.58,-620.87 -379.45,-933.01 -113.2,-287.61 -274.57,-611.72 -365.15,-905.88l-32.13 -47.52c-123.66,-474.43 -1675.64,-4021.36 -1854.29,-4698.85 -366.95,91.74 -1181.32,684.13 -1453.24,880.02 -490.5,353.37 -821.21,699.64 -1196.87,1081.8 -586.16,596.29 -1523.33,1980.63 -1745.5,2798.58z"/>
+  </g>
+ </g></svg></div>
+        <div class="header-emp" id="header-name">—</div>
+      </div>
       <div class="header-right">
+        <span id="sync-indicator" title="Sync status"></span>
         <button class="btn-lang-sm" onclick="openLangModal()">🌐</button>
-        <button class="btn-logout" onclick="logout()" data-i18n="logout">Déconnexion</button>
+        <button class="btn-logout" onclick="logout()" data-i18n="logout">⏻</button>
       </div>
     </div>
     <div class="clock" id="clock">--:--:--</div>
@@ -534,31 +766,26 @@ textarea:focus{border-color:var(--blue)}
     <div class="view active" id="view-saisie">
       <div class="card">
         <div class="card-title" data-i18n="cardDate">Date</div>
-        <div class="field"><input type="date" id="date-input"></div>
+        <input type="date" id="date-input">
       </div>
-
       <div class="h-result">
         <div class="val" id="result-h">0.00</div>
         <div class="unit" data-i18n="netHours">heures nettes calculées</div>
       </div>
-
       <div class="card">
         <div class="card-title" data-i18n="cardPeriods">Périodes travaillées</div>
         <div class="periode-row">
-          <input type="time" id="p1d" oninput="calc()">
-          <div class="sep">→</div>
+          <input type="time" id="p1d" oninput="calc()"><div class="sep">→</div>
           <input type="time" id="p1f" oninput="calc()">
           <button class="btn-now" onclick="setNow('p1f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
         </div>
         <div class="periode-row">
-          <input type="time" id="p2d" oninput="calc()">
-          <div class="sep">→</div>
+          <input type="time" id="p2d" oninput="calc()"><div class="sep">→</div>
           <input type="time" id="p2f" oninput="calc()">
           <button class="btn-now" onclick="setNow('p2f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
         </div>
         <div class="periode-row">
-          <input type="time" id="p3d" oninput="calc()">
-          <div class="sep">→</div>
+          <input type="time" id="p3d" oninput="calc()"><div class="sep">→</div>
           <input type="time" id="p3f" oninput="calc()">
           <button class="btn-now" onclick="setNow('p3f')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>NOW</button>
         </div>
@@ -571,7 +798,6 @@ textarea:focus{border-color:var(--blue)}
           <button class="btn btn-outline btn-sm" onclick="clearT()" data-i18n="clear">Effacer</button>
         </div>
       </div>
-
       <div class="card">
         <div class="card-title" data-i18n="cardAbsence">Code d'absence</div>
         <div class="code-grid">
@@ -585,27 +811,23 @@ textarea:focus{border-color:var(--blue)}
           <button class="code-chip" data-code="F" onclick="selCode(this)">F<span data-i18n="codeF">Férié</span></button>
         </div>
       </div>
-
       <div class="card">
         <div class="card-title" data-i18n="cardDetails">Détails</div>
         <div class="chantier-row">
           <div class="field" style="margin:0">
             <label data-i18n="labelSite">Chantier / Client</label>
             <input type="text" id="chantier" maxlength="40"
-              style="height:46px;border:1.5px solid var(--border);border-radius:10px;
-              padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
+              style="height:46px;border:1.5px solid var(--border);border-radius:10px;padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
           </div>
           <div class="field" style="margin:0">
             <label data-i18n="labelKm">Km trajet</label>
             <input type="number" id="km" placeholder="0" min="0" max="999"
-              style="height:46px;border:1.5px solid var(--border);border-radius:10px;
-              padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
+              style="height:46px;border:1.5px solid var(--border);border-radius:10px;padding:0 13px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none">
           </div>
         </div>
         <textarea id="cmt" data-i18n-placeholder="cmtPlaceholder" placeholder="Commentaire libre…"></textarea>
       </div>
-
-      <button class="btn btn-primary" onclick="save()">
+      <button class="btn btn-primary" onclick="save()" id="btn-save">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         <span data-i18n="saveBtn">Enregistrer</span>
       </button>
@@ -617,31 +839,49 @@ textarea:focus{border-color:var(--blue)}
       <div id="hist-body"></div>
     </div>
 
+    <!-- SIGNATURE -->
+    <div class="view" id="view-signature">
+      <div class="card">
+        <div class="card-title" data-i18n="sigTitle">Signature mensuelle</div>
+        <div class="field">
+          <label data-i18n="sigMonth">Mois à signer</label>
+          <select id="sig-month-sel"></select>
+        </div>
+        <div id="sig-summary" style="margin-bottom:12px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" data-i18n="sigDraw">Signer ici</div>
+        <div class="sig-box" id="sig-box">
+          <canvas id="sig-canvas" class="sig-canvas" height="160"></canvas>
+          <div class="sig-placeholder" id="sig-placeholder" data-i18n="sigPlaceholder">✍ Signez avec le doigt</div>
+        </div>
+        <div class="row mt-8">
+          <button class="btn btn-outline btn-sm" onclick="clearSig()" data-i18n="sigClear">Effacer</button>
+          <button class="btn btn-green btn-sm" onclick="saveSig()" style="flex:2" data-i18n="sigSave">✓ Valider et signer</button>
+        </div>
+        <div id="sig-status" class="mt-8"></div>
+      </div>
+    </div>
+
     <!-- EXPORT -->
     <div class="view" id="view-export">
       <div class="card">
-        <div class="card-title" data-i18n="exportTitle">Export mensuel — un fichier par mois</div>
-        <p class="text-muted" style="margin-bottom:10px" data-i18n="exportDesc">
-          Cliquez sur ↓ pour télécharger le CSV de chaque mois.
-        </p>
+        <div class="card-title" data-i18n="exportTitle">Export mensuel</div>
+        <p class="text-muted" style="margin-bottom:10px" data-i18n="exportDesc">↓ CSV par mois</p>
         <div class="month-csv-list" id="month-csv-list"></div>
         <div class="divider"></div>
         <button class="btn btn-outline" onclick="exportAll()" style="height:44px;font-size:13px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span data-i18n="exportAll">Exporter tous les mois</span>
         </button>
       </div>
-
       <div class="kpi-grid">
-        <div class="kpi-box"><div class="kpi-val" id="kJours">—</div><div class="kpi-lbl" data-i18n="kpiDays">Jours saisis</div></div>
-        <div class="kpi-box"><div class="kpi-val" id="kH">—</div><div class="kpi-lbl" data-i18n="kpiHours">Heures totales</div></div>
-        <div class="kpi-box"><div class="kpi-val orange" id="kSat">—</div><div class="kpi-lbl" data-i18n="kpiSat">H. samedis</div></div>
-        <div class="kpi-box"><div class="kpi-val green" id="kVac">—</div><div class="kpi-lbl" data-i18n="kpiVac">J. vacances</div></div>
+        <div class="kpi-box"><div class="kpi-val" id="kJours">—</div><div class="kpi-lbl" data-i18n="kpiDays">Jours</div></div>
+        <div class="kpi-box"><div class="kpi-val" id="kH">—</div><div class="kpi-lbl" data-i18n="kpiHours">Heures</div></div>
+        <div class="kpi-box"><div class="kpi-val orange" id="kSat">—</div><div class="kpi-lbl" data-i18n="kpiSat">H. sam.</div></div>
+        <div class="kpi-box"><div class="kpi-val green" id="kVac">—</div><div class="kpi-lbl" data-i18n="kpiVac">Vacances</div></div>
       </div>
-
       <button class="btn btn-red" onclick="clearAllData()" style="height:42px;font-size:12px;margin-bottom:12px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-        <span data-i18n="clearAll">Effacer toutes mes données</span>
+        <span data-i18n="clearAll">Effacer mes données</span>
       </button>
     </div>
 
@@ -656,6 +896,10 @@ textarea:focus{border-color:var(--blue)}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span data-i18n="navHistory">Historique</span>
     </button>
+    <button class="nav-btn" onclick="goView('signature',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      <span data-i18n="navSig">Signature</span>
+    </button>
     <button class="nav-btn" onclick="goView('export',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span data-i18n="navExport">Export</span>
@@ -663,35 +907,15 @@ textarea:focus{border-color:var(--blue)}
   </nav>
 </div>
 
-<!-- ══ LANG MODAL ══ -->
+<!-- Lang modal -->
 <div id="lang-modal" onclick="closeLangModal(event)">
   <div class="lang-sheet">
-    <div class="lang-sheet-title" data-i18n="langTitle">Langue / Language</div>
-    <div class="lang-option sel" data-lang="fr" onclick="setLangFromModal('fr')">
-      <div class="lang-flag">🇫🇷</div>
-      <div><div class="lang-name">Français</div><div class="lang-native">Langue par défaut</div></div>
-      <div class="lang-check">✓</div>
-    </div>
-    <div class="lang-option" data-lang="pt" onclick="setLangFromModal('pt')">
-      <div class="lang-flag">🇵🇹</div>
-      <div><div class="lang-name">Português</div><div class="lang-native">Idioma padrão</div></div>
-      <div class="lang-check">✓</div>
-    </div>
-    <div class="lang-option" data-lang="es" onclick="setLangFromModal('es')">
-      <div class="lang-flag">🇪🇸</div>
-      <div><div class="lang-name">Español</div><div class="lang-native">Idioma por defecto</div></div>
-      <div class="lang-check">✓</div>
-    </div>
-    <div class="lang-option" data-lang="de" onclick="setLangFromModal('de')">
-      <div class="lang-flag">🇩🇪</div>
-      <div><div class="lang-name">Deutsch</div><div class="lang-native">Standardsprache</div></div>
-      <div class="lang-check">✓</div>
-    </div>
-    <div class="lang-option" data-lang="en" onclick="setLangFromModal('en')">
-      <div class="lang-flag">🇬🇧</div>
-      <div><div class="lang-name">English</div><div class="lang-native">Default language</div></div>
-      <div class="lang-check">✓</div>
-    </div>
+    <div class="lang-sheet-title" data-i18n="langTitle">Langue</div>
+    <div class="lang-option sel" data-lang="fr" onclick="setLangFromModal('fr')"><div class="lang-flag">🇫🇷</div><div><div class="lang-name">Français</div></div><div class="lang-check">✓</div></div>
+    <div class="lang-option" data-lang="pt" onclick="setLangFromModal('pt')"><div class="lang-flag">🇵🇹</div><div><div class="lang-name">Português</div></div><div class="lang-check">✓</div></div>
+    <div class="lang-option" data-lang="es" onclick="setLangFromModal('es')"><div class="lang-flag">🇪🇸</div><div><div class="lang-name">Español</div></div><div class="lang-check">✓</div></div>
+    <div class="lang-option" data-lang="de" onclick="setLangFromModal('de')"><div class="lang-flag">🇩🇪</div><div><div class="lang-name">Deutsch</div></div><div class="lang-check">✓</div></div>
+    <div class="lang-option" data-lang="en" onclick="setLangFromModal('en')"><div class="lang-flag">🇬🇧</div><div><div class="lang-name">English</div></div><div class="lang-check">✓</div></div>
   </div>
 </div>
 
@@ -699,250 +923,212 @@ textarea:focus{border-color:var(--blue)}
 
 <script>
 // ══════════════════════════════════════════════════════════════════
-//  TRANSLATIONS
+// TRANSLATIONS
 // ══════════════════════════════════════════════════════════════════
 const I18N = {
-fr:{
-  pinTitle:'Entrez votre PIN',
-  adminTitle:'Configuration',adminSub:'Accès patron — gérez les employés et PINs',
-  adminAdd:'Ajouter un employé',adminName:'Prénom et Nom',adminPin:'PIN personnel (4 chiffres)',
-  adminAddBtn:"+ Ajouter l'employé",adminNote:'⚠ PIN unique par employé. Communiquez-le en privé.',
-  adminTeam:'Équipe',adminBack:'← Retour',
-  logout:'Déconnexion',
-  cardDate:'Date',netHours:'heures nettes calculées',cardPeriods:'Périodes travaillées',
-  pointNow:'Pointer maintenant',clear:'Effacer',
-  cardAbsence:"Code d'absence",
+fr:{pinTitle:'Entrez votre PIN',adminTitle:'Configuration',adminSub:'Accès patron',
+  adminAdd:'Ajouter un employé',adminName:'Prénom et Nom',adminPin:'PIN (4 chiffres)',
+  adminAddBtn:'+ Ajouter',adminNote:'⚠ PIN unique par employé.',adminTeam:'Équipe',adminBack:'← Retour',
+  logout:'⏻',cardDate:'Date',netHours:'heures nettes calculées',cardPeriods:'Périodes travaillées',
+  pointNow:'Pointer maintenant',clear:'Effacer',cardAbsence:"Code d'absence",
   codeNone:'Aucun',codeV:'Vacances',codeM:'Maladie',codeA:'Accident',
   codeMil:'Militaire',codeAP:'Abs. payée',codeC:'Correction',codeF:'Férié',
   cardDetails:'Détails',labelSite:'Chantier / Client',labelKm:'Km trajet',
   cmtPlaceholder:'Commentaire libre…',saveBtn:'Enregistrer',
-  navEntry:'Saisie',navHistory:'Historique',navExport:'Export',
-  exportTitle:'Export mensuel — un fichier par mois',
-  exportDesc:'Cliquez sur ↓ pour télécharger le CSV de chaque mois.',
-  exportAll:'Exporter tous les mois',
-  kpiDays:'Jours saisis',kpiHours:'Heures totales',kpiSat:'H. samedis',kpiVac:'J. vacances',
-  clearAll:'Effacer toutes mes données',
-  langTitle:'Langue / Language',
-  pinErr:'PIN incorrect — réessayez',
-  saveOk:'Enregistré ✓',noData:'Aucune donnée',
-  confirmDel:'Supprimer cette saisie?',confirmDelAll:'Effacer TOUTES vos données?',
-  confirmReplace:'Saisie existante pour ce jour. Remplacer?',
-  noHour:"Entrez une heure ou un code d'absence",noDate:'Sélectionnez une date',
-  downloaded:'CSV téléchargé ✓',sharedOk:'Partagé ✓',noDataMonth:'Aucune donnée ce mois',
+  navEntry:'Saisie',navHistory:'Historique',navSig:'Signature',navExport:'Export',navNotif:'Notif.',
+  sigTitle:'Signature mensuelle',sigMonth:'Mois à signer',sigDraw:'Signer ici',
+  sigPlaceholder:'✍ Signez avec le doigt',sigClear:'Effacer',sigSave:'✓ Valider et signer',
+  exportTitle:'Export mensuel',exportDesc:'↓ CSV par mois',exportAll:'Exporter tous les mois',
+  kpiDays:'Jours',kpiHours:'Heures',kpiSat:'H. sam.',kpiVac:'Vacances',
+  clearAll:'Effacer mes données',langTitle:'Langue',
+  pinErr:'PIN incorrect',saveOk:'Enregistré ✓',noData:'Aucune donnée',
+  confirmDel:'Supprimer?',confirmDelAll:'Effacer TOUTES vos données?',
+  confirmReplace:'Remplacer la saisie existante?',noHour:"Entrez une heure ou un code",
+  noDate:'Sélectionnez une date',downloaded:'CSV téléchargé ✓',sharedOk:'Partagé ✓',
   months:['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],
   days:['Di','Lu','Ma','Me','Je','Ve','Sa'],
-  dlBtn:'↓ CSV',emptyMonth:'vide',entriesCount:'entrée(s)',
-  exportAllDone:'Tous les CSV téléchargés',
-  adminPinErr:'PIN admin incorrect',empExists:'Cet employé existe déjà',pinUsed:'Ce PIN est déjà utilisé',
-  pinAdmin:'Ce PIN est réservé à l\'admin',pinFormat:'PIN = exactement 4 chiffres',nameEmpty:'Entrez un nom',
+  dlBtn:'↓ CSV',emptyMonth:'vide',entriesCount:'entrée(s)',exportAllDone:'Tous les CSV téléchargés',
+  adminPinErr:'PIN admin incorrect',empExists:'Employé déjà existant',pinUsed:'PIN déjà utilisé',
+  pinAdmin:"PIN réservé à l'admin",pinFormat:'PIN = 4 chiffres',nameEmpty:'Entrez un nom',
   empAdded:' ajouté ✓',deleted:'Supprimé',dataCleared:'Données effacées',
+  sigSaved:'Signature enregistrée ✓',sigEmpty:'Signez avant de valider',
+  syncOn:'☁ Synchronisé',syncOff:'📱 Hors-ligne',
 },
-pt:{
-  pinTitle:'Introduza o seu PIN',
-  adminTitle:'Configuração',adminSub:'Acesso patrão — gerir funcionários e PINs',
-  adminAdd:'Adicionar funcionário',adminName:'Nome e Apelido',adminPin:'PIN pessoal (4 dígitos)',
-  adminAddBtn:'+ Adicionar funcionário',adminNote:'⚠ PIN único por funcionário. Comunique em privado.',
-  adminTeam:'Equipa',adminBack:'← Voltar',
-  logout:'Sair',
-  cardDate:'Data',netHours:'horas líquidas calculadas',cardPeriods:'Períodos trabalhados',
-  pointNow:'Registar agora',clear:'Limpar',
-  cardAbsence:'Código de ausência',
+pt:{pinTitle:'Introduza o seu PIN',adminTitle:'Configuração',adminSub:'Acesso patrão',
+  adminAdd:'Adicionar funcionário',adminName:'Nome e Apelido',adminPin:'PIN (4 dígitos)',
+  adminAddBtn:'+ Adicionar',adminNote:'⚠ PIN único por funcionário.',adminTeam:'Equipa',adminBack:'← Voltar',
+  logout:'⏻',cardDate:'Data',netHours:'horas líquidas calculadas',cardPeriods:'Períodos trabalhados',
+  pointNow:'Registar agora',clear:'Limpar',cardAbsence:'Código de ausência',
   codeNone:'Nenhum',codeV:'Férias',codeM:'Doença',codeA:'Acidente',
   codeMil:'Militar',codeAP:'Aus. paga',codeC:'Correção',codeF:'Feriado',
   cardDetails:'Detalhes',labelSite:'Obra / Cliente',labelKm:'Km percurso',
   cmtPlaceholder:'Comentário livre…',saveBtn:'Guardar',
-  navEntry:'Registo',navHistory:'Histórico',navExport:'Exportar',
-  exportTitle:'Exportação mensal — um ficheiro por mês',
-  exportDesc:'Clique em ↓ para descarregar o CSV de cada mês.',
-  exportAll:'Exportar todos os meses',
-  kpiDays:'Dias registados',kpiHours:'Horas totais',kpiSat:'H. sábados',kpiVac:'Dias férias',
-  clearAll:'Apagar todos os meus dados',
-  langTitle:'Língua / Language',
-  pinErr:'PIN incorreto — tente novamente',
-  saveOk:'Guardado ✓',noData:'Sem dados',
-  confirmDel:'Apagar este registo?',confirmDelAll:'Apagar TODOS os seus dados?',
-  confirmReplace:'Registo existente para este dia. Substituir?',
-  noHour:'Introduza uma hora ou um código de ausência',noDate:'Selecione uma data',
-  downloaded:'CSV descarregado ✓',sharedOk:'Partilhado ✓',noDataMonth:'Sem dados este mês',
+  navEntry:'Registo',navHistory:'Histórico',navSig:'Assinatura',navExport:'Exportar',navNotif:'Notif.',
+  sigTitle:'Assinatura mensal',sigMonth:'Mês a assinar',sigDraw:'Assinar aqui',
+  sigPlaceholder:'✍ Assine com o dedo',sigClear:'Limpar',sigSave:'✓ Validar e assinar',
+  exportTitle:'Exportação mensal',exportDesc:'↓ CSV por mês',exportAll:'Exportar todos os meses',
+  kpiDays:'Dias',kpiHours:'Horas',kpiSat:'H. sáb.',kpiVac:'Férias',
+  clearAll:'Apagar os meus dados',langTitle:'Língua',
+  pinErr:'PIN incorreto',saveOk:'Guardado ✓',noData:'Sem dados',
+  confirmDel:'Apagar?',confirmDelAll:'Apagar TODOS os dados?',
+  confirmReplace:'Substituir o registo existente?',noHour:'Introduza uma hora ou código',
+  noDate:'Selecione uma data',downloaded:'CSV descarregado ✓',sharedOk:'Partilhado ✓',
   months:['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
   days:['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],
-  dlBtn:'↓ CSV',emptyMonth:'vazio',entriesCount:'registo(s)',
-  exportAllDone:'Todos os CSV descarregados',
-  adminPinErr:'PIN admin incorreto',empExists:'Este funcionário já existe',pinUsed:'Este PIN já está a ser usado',
-  pinAdmin:'Este PIN está reservado ao admin',pinFormat:'PIN = exatamente 4 dígitos',nameEmpty:'Introduza um nome',
+  dlBtn:'↓ CSV',emptyMonth:'vazio',entriesCount:'registo(s)',exportAllDone:'Todos os CSV descarregados',
+  adminPinErr:'PIN admin incorreto',empExists:'Funcionário já existe',pinUsed:'PIN já utilizado',
+  pinAdmin:'PIN reservado ao admin',pinFormat:'PIN = 4 dígitos',nameEmpty:'Introduza um nome',
   empAdded:' adicionado ✓',deleted:'Apagado',dataCleared:'Dados apagados',
+  sigSaved:'Assinatura guardada ✓',sigEmpty:'Assine antes de validar',
+  syncOn:'☁ Sincronizado',syncOff:'📱 Sem ligação',
 },
-es:{
-  pinTitle:'Introduzca su PIN',
-  adminTitle:'Configuración',adminSub:'Acceso patrón — gestionar empleados y PINs',
-  adminAdd:'Añadir empleado',adminName:'Nombre y Apellido',adminPin:'PIN personal (4 dígitos)',
-  adminAddBtn:'+ Añadir empleado',adminNote:'⚠ PIN único por empleado. Comuníquelo en privado.',
-  adminTeam:'Equipo',adminBack:'← Volver',
-  logout:'Salir',
-  cardDate:'Fecha',netHours:'horas netas calculadas',cardPeriods:'Períodos trabajados',
-  pointNow:'Fichar ahora',clear:'Borrar',
-  cardAbsence:'Código de ausencia',
+es:{pinTitle:'Introduzca su PIN',adminTitle:'Configuración',adminSub:'Acceso patrón',
+  adminAdd:'Añadir empleado',adminName:'Nombre y Apellido',adminPin:'PIN (4 dígitos)',
+  adminAddBtn:'+ Añadir',adminNote:'⚠ PIN único por empleado.',adminTeam:'Equipo',adminBack:'← Volver',
+  logout:'⏻',cardDate:'Fecha',netHours:'horas netas calculadas',cardPeriods:'Períodos trabajados',
+  pointNow:'Fichar ahora',clear:'Borrar',cardAbsence:'Código de ausencia',
   codeNone:'Ninguno',codeV:'Vacaciones',codeM:'Enfermedad',codeA:'Accidente',
   codeMil:'Militar',codeAP:'Aus. pagada',codeC:'Corrección',codeF:'Festivo',
   cardDetails:'Detalles',labelSite:'Obra / Cliente',labelKm:'Km trayecto',
   cmtPlaceholder:'Comentario libre…',saveBtn:'Guardar',
-  navEntry:'Registro',navHistory:'Historial',navExport:'Exportar',
-  exportTitle:'Exportación mensual — un archivo por mes',
-  exportDesc:'Pulse ↓ para descargar el CSV de cada mes.',
-  exportAll:'Exportar todos los meses',
-  kpiDays:'Días registrados',kpiHours:'Horas totales',kpiSat:'H. sábados',kpiVac:'Días vacaciones',
-  clearAll:'Borrar todos mis datos',
-  langTitle:'Idioma / Language',
-  pinErr:'PIN incorrecto — inténtelo de nuevo',
-  saveOk:'Guardado ✓',noData:'Sin datos',
-  confirmDel:'¿Eliminar este registro?',confirmDelAll:'¿Borrar TODOS sus datos?',
-  confirmReplace:'Registro existente para este día. ¿Reemplazar?',
-  noHour:'Introduzca una hora o un código de ausencia',noDate:'Seleccione una fecha',
-  downloaded:'CSV descargado ✓',sharedOk:'Compartido ✓',noDataMonth:'Sin datos este mes',
+  navEntry:'Registro',navHistory:'Historial',navSig:'Firma',navExport:'Exportar',navNotif:'Notif.',
+  sigTitle:'Firma mensual',sigMonth:'Mes a firmar',sigDraw:'Firmar aquí',
+  sigPlaceholder:'✍ Firme con el dedo',sigClear:'Borrar',sigSave:'✓ Validar y firmar',
+  exportTitle:'Exportación mensual',exportDesc:'↓ CSV por mes',exportAll:'Exportar todos los meses',
+  kpiDays:'Días',kpiHours:'Horas',kpiSat:'H. sáb.',kpiVac:'Vacaciones',
+  clearAll:'Borrar mis datos',langTitle:'Idioma',
+  pinErr:'PIN incorrecto',saveOk:'Guardado ✓',noData:'Sin datos',
+  confirmDel:'¿Eliminar?',confirmDelAll:'¿Borrar TODOS los datos?',
+  confirmReplace:'¿Reemplazar el registro existente?',noHour:'Introduzca hora o código',
+  noDate:'Seleccione fecha',downloaded:'CSV descargado ✓',sharedOk:'Compartido ✓',
   months:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
   days:['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],
-  dlBtn:'↓ CSV',emptyMonth:'vacío',entriesCount:'registro(s)',
-  exportAllDone:'Todos los CSV descargados',
-  adminPinErr:'PIN admin incorrecto',empExists:'Este empleado ya existe',pinUsed:'Este PIN ya está en uso',
-  pinAdmin:'Este PIN está reservado al admin',pinFormat:'PIN = exactamente 4 dígitos',nameEmpty:'Introduzca un nombre',
+  dlBtn:'↓ CSV',emptyMonth:'vacío',entriesCount:'registro(s)',exportAllDone:'Todos los CSV descargados',
+  adminPinErr:'PIN admin incorrecto',empExists:'Este empleado ya existe',pinUsed:'PIN ya en uso',
+  pinAdmin:'PIN reservado al admin',pinFormat:'PIN = 4 dígitos',nameEmpty:'Introduzca nombre',
   empAdded:' añadido ✓',deleted:'Eliminado',dataCleared:'Datos borrados',
+  sigSaved:'Firma guardada ✓',sigEmpty:'Firme antes de validar',
+  syncOn:'☁ Sincronizado',syncOff:'📱 Sin conexión',
 },
-de:{
-  pinTitle:'PIN eingeben',
-  adminTitle:'Einstellungen',adminSub:'Chef-Zugang — Mitarbeiter und PINs verwalten',
-  adminAdd:'Mitarbeiter hinzufügen',adminName:'Vor- und Nachname',adminPin:'Persönlicher PIN (4 Ziffern)',
-  adminAddBtn:'+ Mitarbeiter hinzufügen',adminNote:'⚠ Einzigartiger PIN pro Mitarbeiter. Vertraulich mitteilen.',
-  adminTeam:'Team',adminBack:'← Zurück',
-  logout:'Abmelden',
-  cardDate:'Datum',netHours:'berechnete Nettostunden',cardPeriods:'Arbeitsperioden',
-  pointNow:'Jetzt stempeln',clear:'Löschen',
-  cardAbsence:'Abwesenheitscode',
+de:{pinTitle:'PIN eingeben',adminTitle:'Einstellungen',adminSub:'Chef-Zugang',
+  adminAdd:'Mitarbeiter hinzufügen',adminName:'Vor- und Nachname',adminPin:'PIN (4 Ziffern)',
+  adminAddBtn:'+ Hinzufügen',adminNote:'⚠ Einzigartiger PIN.',adminTeam:'Team',adminBack:'← Zurück',
+  logout:'⏻',cardDate:'Datum',netHours:'berechnete Nettostunden',cardPeriods:'Arbeitsperioden',
+  pointNow:'Jetzt stempeln',clear:'Löschen',cardAbsence:'Abwesenheitscode',
   codeNone:'Keiner',codeV:'Ferien',codeM:'Krankheit',codeA:'Unfall',
   codeMil:'Militär',codeAP:'Bezahlte Abw.',codeC:'Korrektur',codeF:'Feiertag',
   cardDetails:'Details',labelSite:'Baustelle / Kunde',labelKm:'Km Fahrt',
   cmtPlaceholder:'Freier Kommentar…',saveBtn:'Speichern',
-  navEntry:'Erfassung',navHistory:'Verlauf',navExport:'Export',
-  exportTitle:'Monatlicher Export — eine Datei pro Monat',
-  exportDesc:'Klicken Sie auf ↓ um die CSV-Datei des jeweiligen Monats herunterzuladen.',
-  exportAll:'Alle Monate exportieren',
-  kpiDays:'Erfasste Tage',kpiHours:'Gesamtstunden',kpiSat:'Sa.-Stunden',kpiVac:'Ferientage',
-  clearAll:'Alle meine Daten löschen',
-  langTitle:'Sprache / Language',
-  pinErr:'Falscher PIN — erneut versuchen',
-  saveOk:'Gespeichert ✓',noData:'Keine Daten',
-  confirmDel:'Diesen Eintrag löschen?',confirmDelAll:'ALLE Ihre Daten löschen?',
-  confirmReplace:'Eintrag für diesen Tag vorhanden. Ersetzen?',
-  noHour:'Geben Sie eine Uhrzeit oder einen Abwesenheitscode ein',noDate:'Datum auswählen',
-  downloaded:'CSV heruntergeladen ✓',sharedOk:'Geteilt ✓',noDataMonth:'Keine Daten diesen Monat',
+  navEntry:'Erfassung',navHistory:'Verlauf',navSig:'Unterschrift',navExport:'Export',navNotif:'Benachr.',
+  sigTitle:'Monatliche Unterschrift',sigMonth:'Zu unterschreibender Monat',sigDraw:'Hier unterschreiben',
+  sigPlaceholder:'✍ Mit dem Finger unterschreiben',sigClear:'Löschen',sigSave:'✓ Bestätigen',
+  exportTitle:'Monatlicher Export',exportDesc:'↓ CSV pro Monat',exportAll:'Alle Monate exportieren',
+  kpiDays:'Tage',kpiHours:'Stunden',kpiSat:'Sa.-Std.',kpiVac:'Ferien',
+  clearAll:'Alle Daten löschen',langTitle:'Sprache',
+  pinErr:'Falscher PIN',saveOk:'Gespeichert ✓',noData:'Keine Daten',
+  confirmDel:'Löschen?',confirmDelAll:'ALLE Daten löschen?',
+  confirmReplace:'Vorhandenen Eintrag ersetzen?',noHour:'Uhrzeit oder Code eingeben',
+  noDate:'Datum auswählen',downloaded:'CSV heruntergeladen ✓',sharedOk:'Geteilt ✓',
   months:['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'],
   days:['So','Mo','Di','Mi','Do','Fr','Sa'],
-  dlBtn:'↓ CSV',emptyMonth:'leer',entriesCount:'Eintrag/Einträge',
-  exportAllDone:'Alle CSVs heruntergeladen',
-  adminPinErr:'Admin-PIN falsch',empExists:'Dieser Mitarbeiter existiert bereits',pinUsed:'Dieser PIN wird bereits verwendet',
-  pinAdmin:'Dieser PIN ist für den Admin reserviert',pinFormat:'PIN = genau 4 Ziffern',nameEmpty:'Name eingeben',
+  dlBtn:'↓ CSV',emptyMonth:'leer',entriesCount:'Eintrag/Einträge',exportAllDone:'Alle CSVs heruntergeladen',
+  adminPinErr:'Falscher Admin-PIN',empExists:'Mitarbeiter existiert',pinUsed:'PIN bereits vergeben',
+  pinAdmin:'PIN für Admin reserviert',pinFormat:'PIN = 4 Ziffern',nameEmpty:'Name eingeben',
   empAdded:' hinzugefügt ✓',deleted:'Gelöscht',dataCleared:'Daten gelöscht',
+  sigSaved:'Unterschrift gespeichert ✓',sigEmpty:'Unterschreiben Sie zuerst',
+  syncOn:'☁ Synchronisiert',syncOff:'📱 Offline',
 },
-en:{
-  pinTitle:'Enter your PIN',
-  adminTitle:'Settings',adminSub:'Manager access — manage employees and PINs',
-  adminAdd:'Add employee',adminName:'First and Last Name',adminPin:'Personal PIN (4 digits)',
-  adminAddBtn:'+ Add employee',adminNote:'⚠ Unique PIN per employee. Share privately.',
-  adminTeam:'Team',adminBack:'← Back',
-  logout:'Log out',
-  cardDate:'Date',netHours:'net hours calculated',cardPeriods:'Work periods',
-  pointNow:'Clock in now',clear:'Clear',
-  cardAbsence:'Absence code',
+en:{pinTitle:'Enter your PIN',adminTitle:'Settings',adminSub:'Manager access',
+  adminAdd:'Add employee',adminName:'First and Last Name',adminPin:'PIN (4 digits)',
+  adminAddBtn:'+ Add',adminNote:'⚠ Unique PIN per employee.',adminTeam:'Team',adminBack:'← Back',
+  logout:'⏻',cardDate:'Date',netHours:'net hours calculated',cardPeriods:'Work periods',
+  pointNow:'Clock in now',clear:'Clear',cardAbsence:'Absence code',
   codeNone:'None',codeV:'Holiday',codeM:'Sick leave',codeA:'Accident',
   codeMil:'Military',codeAP:'Paid absence',codeC:'Correction',codeF:'Public holiday',
   cardDetails:'Details',labelSite:'Site / Client',labelKm:'Km distance',
   cmtPlaceholder:'Free comment…',saveBtn:'Save',
-  navEntry:'Entry',navHistory:'History',navExport:'Export',
-  exportTitle:'Monthly export — one file per month',
-  exportDesc:'Click ↓ to download the CSV for each month.',
-  exportAll:'Export all months',
-  kpiDays:'Days entered',kpiHours:'Total hours',kpiSat:'Sat. hours',kpiVac:'Holiday days',
-  clearAll:'Delete all my data',
-  langTitle:'Language',
-  pinErr:'Wrong PIN — please try again',
-  saveOk:'Saved ✓',noData:'No data',
-  confirmDel:'Delete this entry?',confirmDelAll:'Delete ALL your data?',
-  confirmReplace:'Entry already exists for this day. Replace?',
-  noHour:'Enter a time or an absence code',noDate:'Select a date',
-  downloaded:'CSV downloaded ✓',sharedOk:'Shared ✓',noDataMonth:'No data this month',
+  navEntry:'Entry',navHistory:'History',navSig:'Signature',navExport:'Export',navNotif:'Notif.',
+  sigTitle:'Monthly signature',sigMonth:'Month to sign',sigDraw:'Sign here',
+  sigPlaceholder:'✍ Sign with your finger',sigClear:'Clear',sigSave:'✓ Validate and sign',
+  exportTitle:'Monthly export',exportDesc:'↓ CSV per month',exportAll:'Export all months',
+  kpiDays:'Days',kpiHours:'Hours',kpiSat:'Sat. hrs',kpiVac:'Holiday',
+  clearAll:'Delete my data',langTitle:'Language',
+  pinErr:'Wrong PIN',saveOk:'Saved ✓',noData:'No data',
+  confirmDel:'Delete?',confirmDelAll:'Delete ALL data?',
+  confirmReplace:'Replace existing entry?',noHour:'Enter a time or absence code',
+  noDate:'Select a date',downloaded:'CSV downloaded ✓',sharedOk:'Shared ✓',
   months:['January','February','March','April','May','June','July','August','September','October','November','December'],
   days:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
-  dlBtn:'↓ CSV',emptyMonth:'empty',entriesCount:'entry/entries',
-  exportAllDone:'All CSVs downloaded',
-  adminPinErr:'Wrong admin PIN',empExists:'This employee already exists',pinUsed:'This PIN is already in use',
-  pinAdmin:'This PIN is reserved for the admin',pinFormat:'PIN = exactly 4 digits',nameEmpty:'Enter a name',
+  dlBtn:'↓ CSV',emptyMonth:'empty',entriesCount:'entry/entries',exportAllDone:'All CSVs downloaded',
+  adminPinErr:'Wrong admin PIN',empExists:'Employee already exists',pinUsed:'PIN already in use',
+  pinAdmin:'PIN reserved for admin',pinFormat:'PIN = 4 digits',nameEmpty:'Enter a name',
   empAdded:' added ✓',deleted:'Deleted',dataCleared:'Data cleared',
+  sigSaved:'Signature saved ✓',sigEmpty:'Please sign first',
+  syncOn:'☁ Synced',syncOff:'📱 Offline',
 },
 };
 
-// ══════════════════════════════════════════════════════════════════
-//  LANG ENGINE
-// ══════════════════════════════════════════════════════════════════
-let lang = localStorage.getItem('mh_lang') || 'fr';
 const t = key => (I18N[lang]||I18N.fr)[key] || key;
 
+// ══════════════════════════════════════════════════════════════════
+// LANG
+// ══════════════════════════════════════════════════════════════════
+let lang = localStorage.getItem('mh_lang') || 'fr';
 function setLang(l, save=true) {
   lang = l;
   if (save) localStorage.setItem('mh_lang', l);
-  // Update all data-i18n elements
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = t(key);
+    if (el.tagName==='INPUT'||el.tagName==='TEXTAREA') el.placeholder = t(key);
     else el.textContent = t(key);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
-  // Update lang bar buttons
-  document.querySelectorAll('#lang-bar .lang-btn').forEach(b => {
-    b.classList.toggle('active', b.textContent === l.toUpperCase());
-  });
-  // Update modal
-  document.querySelectorAll('.lang-option').forEach(o => {
-    o.classList.toggle('sel', o.dataset.lang === l);
-  });
+  document.querySelectorAll('#lang-bar .lang-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent===l.toUpperCase()));
+  document.querySelectorAll('.lang-option').forEach(o =>
+    o.classList.toggle('sel', o.dataset.lang===l));
   document.documentElement.lang = l;
-  // Re-render dynamic content if app is visible
   if (user) { renderHist(); renderMonthCsvList(); refreshStats(); }
 }
-
 function openLangModal() { document.getElementById('lang-modal').classList.add('open'); }
 function closeLangModal(e) {
-  if (e.target === document.getElementById('lang-modal')) document.getElementById('lang-modal').classList.remove('open');
+  if (e.target===document.getElementById('lang-modal'))
+    document.getElementById('lang-modal').classList.remove('open');
 }
-function setLangFromModal(l) {
-  setLang(l);
-  document.getElementById('lang-modal').classList.remove('open');
-}
+function setLangFromModal(l) { setLang(l); document.getElementById('lang-modal').classList.remove('open'); }
 
 // ══════════════════════════════════════════════════════════════════
-//  CONSTANTS
+// CONSTANTS
 // ══════════════════════════════════════════════════════════════════
 const ADMIN = '1234';
-const DEST  = 'mh.maler.gipser@gmail.com';
 const FERIES = new Set(['2026-01-01','2026-01-02','2026-04-03','2026-04-06',
   '2026-05-01','2026-05-14','2026-05-25','2026-08-01','2026-12-25','2026-12-26']);
-// Always use FR months in CSV (for Excel import compatibility)
 const MOIS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const JOURS_FR = ['Di','Lu','Ma','Me','Je','Ve','Sa'];
 
 // ══════════════════════════════════════════════════════════════════
-//  STORAGE
+// SYNC STATUS
 // ══════════════════════════════════════════════════════════════════
-const getEmps  = () => { try { return JSON.parse(localStorage.getItem('mh_emps')||'[]'); } catch { return []; } };
-const saveEmps = a  => localStorage.setItem('mh_emps', JSON.stringify(a));
-function empKey(n) { return 'mh_e_'+btoa(unescape(encodeURIComponent(n))).replace(/=/g,''); }
-const getEntries  = n => { try { return JSON.parse(localStorage.getItem(empKey(n))||'[]'); } catch { return []; } };
-const saveEntries = (n,a) => localStorage.setItem(empKey(n), JSON.stringify(a));
+function updateSyncUI() {
+  const el = document.getElementById('sync-indicator');
+  if (!el) return;
+  const ready = window.FIREBASE_READY;
+  el.innerHTML = ready
+    ? '<span class="sync-dot ok"></span>'
+    : '<span class="sync-dot off"></span>';
+  el.title = ready ? t('syncOn') : t('syncOff');
+  const cs = document.getElementById('cloud-status');
+  if (cs) {
+    cs.innerHTML = `<span class="cloud-badge ${ready?'cloud-on':'cloud-off'}">${ready?t('syncOn'):t('syncOff')}</span>`;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
-//  PIN
+// PIN
 // ══════════════════════════════════════════════════════════════════
-let buf = '', user = null;
+let buf='', user=null;
 function pinKey(d) {
   if (buf.length>=4) return;
   buf+=d; updateDots();
@@ -950,11 +1136,15 @@ function pinKey(d) {
 }
 function pinDel() { buf=buf.slice(0,-1); updateDots(); document.getElementById('pin-error').textContent=''; }
 function updateDots() { for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('filled',i<buf.length); }
-function checkPin() {
+async function checkPin() {
   if (buf===ADMIN) { buf=''; updateDots(); openAdmin(); return; }
-  const e=getEmps().find(e=>e.pin===buf);
-  if (e) { user=e.name; buf=''; updateDots(); document.getElementById('pin-error').textContent=''; loginOK(); }
-  else {
+  const emps = await window.DB.getEmployees();
+  const e = emps.find(e=>e.pin===buf);
+  if (e) {
+    user=e.name; buf=''; updateDots();
+    document.getElementById('pin-error').textContent='';
+    loginOK();
+  } else {
     document.getElementById('pin-error').textContent=t('pinErr');
     buf=''; updateDots();
     const dots=document.getElementById('pin-dots');
@@ -962,65 +1152,162 @@ function checkPin() {
   }
 }
 function openAdminPrompt() {
-  const p=prompt(t('adminPin')+' (admin):');
+  const p=prompt('PIN admin:');
   if (p===null) return;
   if (p===ADMIN) openAdmin(); else showToast(t('adminPinErr'),'error');
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  ADMIN
+// ADMIN
 // ══════════════════════════════════════════════════════════════════
 function openAdmin() {
   document.getElementById('screen-pin').style.display='none';
   document.getElementById('lang-bar').style.display='none';
   document.getElementById('screen-admin').style.display='flex';
-  renderAdmin();
+  adminTab('employees');
 }
 function adminBack() {
   document.getElementById('screen-admin').style.display='none';
   document.getElementById('screen-pin').style.display='flex';
   document.getElementById('lang-bar').style.display='flex';
 }
-function renderAdmin() {
-  const emps=getEmps();
-  document.getElementById('emp-count').textContent=emps.length;
-  const div=document.getElementById('admin-emp-list');
-  if (!emps.length) { div.innerHTML=`<p style="color:rgba(255,255,255,.35);font-size:12px;padding:8px 0">${t('noData')}</p>`; return; }
-  div.innerHTML=emps.map((e,i)=>`
+function adminTab(tab) {
+  ['employees','dashboard','notif'].forEach(id => {
+    document.getElementById(`admin-tab-${id}`).style.display = id===tab ? 'block' : 'none';
+  });
+  document.getElementById('tab-emp').className = `btn btn-sm ${tab==='employees'?'btn-primary':'btn-outline'}`;
+  document.getElementById('tab-dash').className = `btn btn-sm ${tab==='dashboard'?'btn-primary':'btn-outline'}`;
+  document.getElementById('tab-notif').className = `btn btn-sm ${tab==='notif'?'btn-primary':'btn-outline'}`;
+  if (tab==='employees') renderAdmin();
+  if (tab==='dashboard') initDashboard();
+}
+async function renderAdmin() {
+  const emps = await window.DB.getEmployees();
+  document.getElementById('emp-count').textContent = emps.length;
+  const div = document.getElementById('admin-emp-list');
+  if (!emps.length) { div.innerHTML=`<p style="color:var(--muted);font-size:12px;padding:8px 0">${t('noData')}</p>`; return; }
+  div.innerHTML = emps.map((e,i)=>`
     <div class="emp-row">
       <div><div class="emp-name">${esc(e.name)}</div><div class="emp-pin">PIN: ${e.pin}</div></div>
-      <button class="btn-del-emp" onclick="adminDel(${i})">${t('deleted')}</button>
+      <button class="btn-del-emp" onclick="adminDel('${esc(e.name)}')">✕</button>
     </div>`).join('');
 }
-function adminAdd() {
+async function adminAdd() {
   const name=document.getElementById('new-emp-name').value.trim();
   const pin=document.getElementById('new-emp-pin').value.trim();
   if (!name) { showToast(t('nameEmpty'),'error'); return; }
   if (!/^\d{4}$/.test(pin)) { showToast(t('pinFormat'),'error'); return; }
   if (pin===ADMIN) { showToast(t('pinAdmin'),'error'); return; }
-  const emps=getEmps();
+  const emps = await window.DB.getEmployees();
   if (emps.find(e=>e.pin===pin)) { showToast(t('pinUsed'),'error'); return; }
   if (emps.find(e=>e.name===name)) { showToast(t('empExists'),'error'); return; }
-  emps.push({name,pin}); saveEmps(emps);
+  await window.DB.saveEmployee({name, pin});
   document.getElementById('new-emp-name').value='';
   document.getElementById('new-emp-pin').value='';
-  renderAdmin(); showToast(name+t('empAdded'),'success');
+  renderAdmin();
+  showToast(name+t('empAdded'),'success');
 }
-function adminDel(i) {
-  if (!confirm(t('confirmDelAll'))) return;
-  const emps=getEmps(); emps.splice(i,1); saveEmps(emps); renderAdmin();
+async function adminDel(name) {
+  if (!confirm(t('confirmDel'))) return;
+  await window.DB.deleteEmployee(name);
+  renderAdmin();
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  LOGIN / LOGOUT
+// DASHBOARD (admin)
 // ══════════════════════════════════════════════════════════════════
-function loginOK() {
+async function initDashboard() {
+  const sel = document.getElementById('dash-month-sel');
+  if (!sel.options.length) {
+    const months = I18N[lang].months;
+    const y = new Date().getFullYear();
+    for (let m=0; m<12; m++) {
+      const o = document.createElement('option');
+      o.value = `${y}-${S(m+1)}`;
+      o.textContent = `${months[m]} ${y}`;
+      if (m === new Date().getMonth()) o.selected = true;
+      sel.appendChild(o);
+    }
+  }
+  loadDashboard();
+}
+async function loadDashboard() {
+  const ym = document.getElementById('dash-month-sel').value;
+  const body = document.getElementById('dashboard-body');
+  body.innerHTML = '<p class="text-muted">Chargement…</p>';
+  const emps = await window.DB.getEmployees();
+  if (!emps.length) { body.innerHTML=`<p class="text-muted">${t('noData')}</p>`; return; }
+  let html = '';
+  for (const emp of emps) {
+    const entries = await window.DB.getEntries(emp.name);
+    const monthEntries = entries.filter(e=>e.date.startsWith(ym));
+    const tot = monthEntries.reduce((s,e)=>s+e.h,0);
+    const vac = monthEntries.filter(e=>e.code==='V').length;
+    const mal = monthEntries.filter(e=>e.code==='M').length;
+    const sig = await window.DB.getSignature(emp.name, ym);
+    html += `<div class="dash-emp-card">
+      <div class="dash-emp-name">${esc(emp.name)}</div>
+      <div class="dash-emp-stats">
+        <span class="dash-stat">${monthEntries.length} jours</span>
+        <span class="dash-stat orange">${tot.toFixed(2)}h</span>
+        ${vac ? `<span class="dash-stat green">V:${vac}j</span>` : ''}
+        ${mal ? `<span class="dash-stat red">M:${mal}j</span>` : ''}
+        <span class="dash-stat ${sig?'green':''}"> ${sig?'✓ Signé':'⚠ Non signé'}</span>
+      </div>
+    </div>`;
+  }
+  body.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════════
+async function sendReminders() {
+  const status = document.getElementById('notif-status');
+  status.textContent = 'Envoi en cours…';
+  if (!window.FIREBASE_READY) {
+    status.textContent = '⚠ Firebase non configuré — notifications non disponibles.';
+    return;
+  }
+  // Request permission for this device (admin)
+  const token = await window.FCM.requestPermission();
+  if (!token) {
+    status.textContent = '⚠ Permission refusée pour les notifications.';
+    return;
+  }
+  // In a full implementation, you'd call a Cloud Function here
+  // For now, show instructions
+  status.innerHTML = `✓ Token FCM obtenu.<br>
+    Pour envoyer des notifications automatiques, configurez une<br>
+    <strong>Cloud Function Firebase</strong> qui vérifie chaque jour<br>
+    quels employés n'ont pas saisi leurs heures et leur envoie un rappel.`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOGIN / LOGOUT
+// ══════════════════════════════════════════════════════════════════
+async function loginOK() {
   document.getElementById('screen-pin').style.display='none';
   document.getElementById('lang-bar').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('header-name').textContent=user;
   const n=new Date();
   document.getElementById('date-input').value=`${n.getFullYear()}-${S(n.getMonth()+1)}-${S(n.getDate())}`;
+  initSigMonthSel();
+  updateSyncUI();
+  // Request notification permission
+  setTimeout(async ()=>{
+    if ('Notification' in window && Notification.permission === 'default') {
+      const token = await window.FCM.requestPermission();
+      if (token) {
+        // Save token to Firestore for this employee
+        if (window.FIREBASE_READY) {
+          const empId = window.DB.empKey(user);
+          // Would save to /fcm_tokens/{empId}
+        }
+      }
+    }
+  }, 3000);
   startClock();
 }
 function logout() {
@@ -1030,29 +1317,27 @@ function logout() {
   document.getElementById('lang-bar').style.display='flex';
   buf=''; updateDots(); document.getElementById('pin-error').textContent='';
   clearT();
-  document.getElementById('cmt').value='';
-  document.getElementById('chantier').value='';
-  document.getElementById('km').value='';
+  ['cmt','chantier','km'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
   document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
   goView('saisie',document.querySelector('.nav-btn'));
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  CLOCK
+// CLOCK
 // ══════════════════════════════════════════════════════════════════
 let clkInt;
 function startClock() { tick(); clkInt=setInterval(tick,1000); }
 function stopClock()  { clearInterval(clkInt); }
 function tick() {
   const n=new Date();
-  document.getElementById('clock').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>S(v)).join(':');
-  const days=t('days'); const months=t('months');
+  document.getElementById('clock').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(S).join(':');
+  const days=t('days'), months=t('months');
   document.getElementById('clock-date').textContent=`${days[n.getDay()]} ${S(n.getDate())} ${months[n.getMonth()]} ${n.getFullYear()}`;
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NAV
+// NAV
 // ══════════════════════════════════════════════════════════════════
 function goView(name,btn) {
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1062,10 +1347,11 @@ function goView(name,btn) {
   document.getElementById('main').scrollTop=0;
   if (name==='historique') renderHist();
   if (name==='export') { renderMonthCsvList(); refreshStats(); }
+  if (name==='signature') renderSigView();
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SAISIE
+// SAISIE
 // ══════════════════════════════════════════════════════════════════
 let code='';
 function selCode(b) {
@@ -1091,7 +1377,7 @@ function clearT() {
   ['p1d','p1f','p2d','p2f','p3d','p3f'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('result-h').textContent='0.00';
 }
-function save() {
+async function save() {
   const date=document.getElementById('date-input').value;
   if (!date) { showToast(t('noDate'),'error'); return; }
   const p1d=document.getElementById('p1d').value, p1f=document.getElementById('p1f').value;
@@ -1103,28 +1389,31 @@ function save() {
   if (!p1d && !code) { showToast(t('noHour'),'error'); return; }
   let tot=0;
   for (const [d,f] of [[p1d,p1f],[p2d,p2f],[p3d,p3f]]) { if(d&&f){const diff=t2m(f)-t2m(d);if(diff>0)tot+=diff;} }
-  const entries=getEntries(user);
-  const idx=entries.findIndex(e=>e.date===date);
-  if (idx>=0) { if (!confirm(t('confirmReplace'))) return; entries.splice(idx,1); }
-  entries.push({id:Date.now(),date,p1d,p1f,p2d,p2f,p3d,p3f,h:+(tot/60).toFixed(2),code,cmt,chantier,km,ts:new Date().toISOString()});
-  entries.sort((a,b)=>a.date.localeCompare(b.date));
-  saveEntries(user,entries);
+  const entries = await window.DB.getEntries(user);
+  if (entries.find(e=>e.date===date)) { if (!confirm(t('confirmReplace'))) return; }
+  const entry = {id:Date.now(),date,p1d,p1f,p2d,p2f,p3d,p3f,
+    h:+(tot/60).toFixed(2),code,cmt,chantier,km,ts:new Date().toISOString()};
+  const btn = document.getElementById('btn-save');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  await window.DB.saveEntry(user, entry);
+  btn.innerHTML = `<span data-i18n="saveBtn">${t('saveBtn')}</span>`;
+  btn.disabled = false;
   clearT();
-  document.getElementById('cmt').value='';
-  document.getElementById('chantier').value='';
-  document.getElementById('km').value='';
+  ['cmt','chantier','km'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
   document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
   showToast(t('saveOk'),'success');
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  HISTORIQUE
+// HISTORIQUE
 // ══════════════════════════════════════════════════════════════════
-function renderHist() {
-  const entries=getEntries(user), div=document.getElementById('hist-body');
+async function renderHist() {
+  const entries = await window.DB.getEntries(user);
+  const div = document.getElementById('hist-body');
   const months=t('months'), days=t('days');
-  if (!entries.length) { div.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>${t('noData')}</p></div>`; return; }
+  if (!entries.length) { div.innerHTML=`<div class="empty"><p>${t('noData')}</p></div>`; return; }
   const byM={};
   [...entries].reverse().forEach(e=>{const k=e.date.slice(0,7); if(!byM[k]) byM[k]=[]; byM[k].push(e);});
   let html='';
@@ -1135,201 +1424,243 @@ function renderHist() {
       const d=new Date(e.date+'T12:00:00'), wd=d.getDay();
       const isSat=wd===6, isFer=FERIES.has(e.date);
       const dn=String(d.getDate()).padStart(2,'0');
-      const times=tStr(e);
-      const info=[times, e.chantier?`<b>${esc(e.chantier)}</b>`:'', e.km?`${e.km}km`:'', e.cmt?esc(e.cmt.slice(0,20)):''].filter(Boolean).join(' · ');
+      const times=[e.p1d&&e.p1f?`${e.p1d}→${e.p1f}`:'',e.p2d&&e.p2f?`${e.p2d}→${e.p2f}`:'',e.p3d&&e.p3f?`${e.p3d}→${e.p3f}`:''].filter(Boolean).join(' · ');
+      const info=[times,e.chantier?`<b>${esc(e.chantier)}</b>`:'',e.km?`${e.km}km`:''].filter(Boolean).join(' · ');
       html+=`<div class="hist-item ${isSat?'sat':isFer?'hol':''}">
         <div class="date-box"><div class="dn">${dn}</div><div class="dw">${days[wd]}</div></div>
-        <div class="h-info">
-          <div style="font-size:13px;font-weight:600">${e.h>0?e.h.toFixed(2)+'h':e.code||'—'}</div>
-          <div class="h-times">${info||'—'}</div>
-        </div>
+        <div class="h-info"><div style="font-size:13px;font-weight:600">${e.h>0?e.h.toFixed(2)+'h':e.code||'—'}</div>
+          <div class="h-times">${info||'—'}</div></div>
         ${e.code?`<span class="h-code">${e.code}</span>`:'<span></span>'}
         <div class="h-val ${isSat?'sat':e.h===0?'zero':''}">${e.h>0?e.h.toFixed(2):'—'}</div>
-        <button class="del-btn" onclick="delEntry(${e.id})">✕</button>
+        <button class="del-btn" onclick="delEntry('${e.date}')">✕</button>
       </div>`;
     });
   });
   div.innerHTML=html;
 }
-function tStr(e) {
-  const p=[];
-  if(e.p1d&&e.p1f) p.push(`${e.p1d}→${e.p1f}`);
-  if(e.p2d&&e.p2f) p.push(`${e.p2d}→${e.p2f}`);
-  if(e.p3d&&e.p3f) p.push(`${e.p3d}→${e.p3f}`);
-  return p.join(' · ')||(e.code?`Code: ${e.code}`:'');
-}
-function delEntry(id) {
+async function delEntry(date) {
   if (!confirm(t('confirmDel'))) return;
-  saveEntries(user,getEntries(user).filter(e=>e.id!==id));
+  await window.DB.deleteEntry(user, date);
   renderHist(); showToast(t('deleted'),'');
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  EXPORT — MONTHLY CSV LIST
+// SIGNATURE
 // ══════════════════════════════════════════════════════════════════
-function renderMonthCsvList() {
-  const entries = getEntries(user);
+let sigDrawing=false, sigHasMark=false;
+const sigCanvas = () => document.getElementById('sig-canvas');
+const sigCtx = () => sigCanvas().getContext('2d');
+
+function initSigMonthSel() {
+  const sel = document.getElementById('sig-month-sel');
+  sel.innerHTML = '';
   const months = t('months');
-  const byM = {};
-  entries.forEach(e => {
-    const k = e.date.slice(0,7);
-    if (!byM[k]) byM[k] = [];
-    byM[k].push(e);
-  });
+  const y = new Date().getFullYear();
+  for (let m=11; m>=0; m--) {
+    const o = document.createElement('option');
+    o.value = `${y}-${S(m+1)}`;
+    o.textContent = `${months[m]} ${y}`;
+    if (m === new Date().getMonth()) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.onchange = renderSigView;
+}
 
-  // Build list for 2026 + any other years present
-  const allYears = new Set(entries.map(e=>e.date.slice(0,4)));
+async function renderSigView() {
+  const ym = document.getElementById('sig-month-sel').value;
+  const entries = await window.DB.getEntries(user);
+  const monthEntries = entries.filter(e=>e.date.startsWith(ym));
+  const tot = monthEntries.reduce((s,e)=>s+e.h,0);
+  const months = t('months'); const [y,m] = ym.split('-');
+  document.getElementById('sig-summary').innerHTML =
+    `<div style="background:var(--bg);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--navy)">
+      <strong>${months[parseInt(m)-1]} ${y}</strong> — ${monthEntries.length} jours · ${tot.toFixed(2)}h
+    </div>`;
+  // Check existing signature
+  const existing = await window.DB.getSignature(user, ym);
+  const box = document.getElementById('sig-box');
+  const placeholder = document.getElementById('sig-placeholder');
+  if (existing) {
+    const img = new Image();
+    img.onload = () => {
+      const c = sigCanvas();
+      c.width = c.offsetWidth * window.devicePixelRatio;
+      c.height = 160 * window.devicePixelRatio;
+      sigCtx().drawImage(img, 0, 0, c.width, c.height);
+    };
+    img.src = existing;
+    box.className = 'sig-box sig-signed';
+    placeholder.textContent = '✓ ' + t('sigSaved');
+    sigHasMark = true;
+  } else {
+    box.className = 'sig-box';
+    placeholder.textContent = t('sigPlaceholder');
+    clearSig();
+  }
+  initSigCanvas();
+}
+
+function initSigCanvas() {
+  const canvas = sigCanvas();
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = 160 * window.devicePixelRatio;
+  const ctx = sigCtx();
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.strokeStyle = '#1A1A2E';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return {x:(src.clientX-rect.left), y:(src.clientY-rect.top)};
+  }
+  canvas.onmousedown = canvas.ontouchstart = e => {
+    e.preventDefault(); sigDrawing=true; sigHasMark=true;
+    const {x,y}=getPos(e); ctx.beginPath(); ctx.moveTo(x,y);
+    document.getElementById('sig-placeholder').style.display='none';
+    document.getElementById('sig-box').className='sig-box';
+  };
+  canvas.onmousemove = canvas.ontouchmove = e => {
+    e.preventDefault(); if(!sigDrawing) return;
+    const {x,y}=getPos(e); ctx.lineTo(x,y); ctx.stroke();
+  };
+  canvas.onmouseup = canvas.ontouchend = () => { sigDrawing=false; };
+}
+
+function clearSig() {
+  const canvas = sigCanvas();
+  if (!canvas) return;
+  sigCtx().clearRect(0,0,canvas.width/window.devicePixelRatio,canvas.height/window.devicePixelRatio);
+  sigHasMark=false;
+  document.getElementById('sig-placeholder').style.display='flex';
+  document.getElementById('sig-box').className='sig-box';
+}
+
+async function saveSig() {
+  if (!sigHasMark) { showToast(t('sigEmpty'),'error'); return; }
+  const ym = document.getElementById('sig-month-sel').value;
+  const dataUrl = sigCanvas().toDataURL('image/png');
+  await window.DB.saveSignature(user, ym, dataUrl);
+  document.getElementById('sig-box').className='sig-box sig-signed';
+  document.getElementById('sig-placeholder').textContent='✓ '+t('sigSaved');
+  document.getElementById('sig-placeholder').style.display='flex';
+  showToast(t('sigSaved'),'success');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════════
+async function renderMonthCsvList() {
+  const entries = await window.DB.getEntries(user);
+  const months = t('months');
+  const byM={};
+  entries.forEach(e=>{const k=e.date.slice(0,7); if(!byM[k]) byM[k]=[]; byM[k].push(e);});
+  const allYears=new Set(entries.map(e=>e.date.slice(0,4)));
   if (!allYears.size) allYears.add('2026');
-
-  const rows = [];
-  allYears.forEach(y => {
-    for (let m=0; m<12; m++) {
-      const key = `${y}-${S(m+1)}`;
-      const es = byM[key] || [];
-      rows.push({key, y:parseInt(y), m, es});
-    }
-  });
-  // Sort desc
+  const rows=[];
+  allYears.forEach(y=>{for(let m=0;m<12;m++){const key=`${y}-${S(m+1)}`;rows.push({key,y:parseInt(y),m,es:byM[key]||[]});}});
   rows.sort((a,b)=>b.key.localeCompare(a.key));
-
-  const container = document.getElementById('month-csv-list');
-  if (!rows.length) { container.innerHTML=`<p class="text-muted">${t('noData')}</p>`; return; }
-
-  container.innerHTML = rows.map(({key,y,m,es}) => {
-    const hasData = es.length > 0;
-    const tot = es.reduce((s,e)=>s+e.h,0);
+  const container=document.getElementById('month-csv-list');
+  container.innerHTML=rows.map(({key,y,m,es})=>{
+    const hasData=es.length>0, tot=es.reduce((s,e)=>s+e.h,0);
     return `<div class="month-csv-row ${hasData?'':'empty-m'}">
       <div class="month-csv-info">
         <div class="month-csv-name">${months[m]} ${y}</div>
-        <div class="month-csv-count">${hasData ? `${es.length} ${t('entriesCount')} · ${tot.toFixed(2)}h` : t('emptyMonth')}</div>
+        <div class="month-csv-count">${hasData?`${es.length} ${t('entriesCount')} · ${tot.toFixed(2)}h`:t('emptyMonth')}</div>
       </div>
       <button class="btn-dl" onclick="downloadMonthCSV('${key}')" ${hasData?'':'disabled'}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         ${t('dlBtn')}
       </button>
     </div>`;
   }).join('');
 }
-
-function refreshStats() {
-  const entries = getEntries(user);
-  const tot = entries.reduce((s,e)=>s+e.h,0);
-  const sat = entries.filter(e=>new Date(e.date+'T12:00:00').getDay()===6).reduce((s,e)=>s+e.h,0);
-  document.getElementById('kJours').textContent = entries.length;
-  document.getElementById('kH').textContent = tot.toFixed(2);
-  document.getElementById('kSat').textContent = sat.toFixed(2);
-  document.getElementById('kVac').textContent = entries.filter(e=>e.code==='V').length;
+async function refreshStats() {
+  const entries=await window.DB.getEntries(user);
+  const tot=entries.reduce((s,e)=>s+e.h,0);
+  const sat=entries.filter(e=>new Date(e.date+'T12:00:00').getDay()===6).reduce((s,e)=>s+e.h,0);
+  document.getElementById('kJours').textContent=entries.length;
+  document.getElementById('kH').textContent=tot.toFixed(2);
+  document.getElementById('kSat').textContent=sat.toFixed(2);
+  document.getElementById('kVac').textContent=entries.filter(e=>e.code==='V').length;
 }
-
-function buildMonthCSV(yearMonth) {
-  const [y, mStr] = yearMonth.split('-');
-  const m = parseInt(mStr) - 1;
-  const es = getEntries(user).filter(e => e.date.startsWith(yearMonth));
-
-  // Always use FR month names in CSV header (for Excel import script compatibility)
-  const lines = [
-    `## MH_IMPORT_V2`,
-    `## EMPLOYE:${user}`,
-    `## MOIS:${MOIS_FR[m]}`,
-    `## ANNEE:${y}`,
-    `## PERIODE:${yearMonth}`,
-    `## EXPORTE:${new Date().toISOString().slice(0,10)}`,
-    `## LANG:${lang}`,
-    ``,
-    `DATE_ISO,JOUR,DEB1,FIN1,DEB2,FIN2,DEB3,FIN3,HEURES,CODE,CHANTIER,KM,COMMENTAIRE`,
-  ];
-
-  let tot=0, sat=0, vac=0, mal=0, acc=0;
-  es.forEach(e => {
-    const d = new Date(e.date+'T12:00:00'), wd = d.getDay();
-    lines.push([
-      e.date, JOURS_FR[wd],
-      e.p1d||'', e.p1f||'',
-      e.p2d||'', e.p2f||'',
-      e.p3d||'', e.p3f||'',
-      e.h.toFixed(2), e.code||'',
-      (e.chantier||'').replace(/[,\n\r]/g,' '),
-      e.km||0,
-      (e.cmt||'').replace(/[,\n\r]/g,' ')
-    ].join(','));
-    tot+=e.h;
-    if (wd===6) sat+=e.h;
-    if (e.code==='V') vac++;
-    if (e.code==='M') mal++;
-    if (e.code==='A') acc++;
+async function buildMonthCSV(yearMonth) {
+  const [y,mStr]=yearMonth.split('-'); const m=parseInt(mStr)-1;
+  const entries=await window.DB.getEntries(user);
+  const es=entries.filter(e=>e.date.startsWith(yearMonth));
+  const lines=[`## MH_IMPORT_V2`,`## EMPLOYE:${user}`,`## MOIS:${MOIS_FR[m]}`,
+    `## ANNEE:${y}`,`## PERIODE:${yearMonth}`,`## EXPORTE:${new Date().toISOString().slice(0,10)}`,
+    ``,`DATE_ISO,JOUR,DEB1,FIN1,DEB2,FIN2,DEB3,FIN3,HEURES,CODE,CHANTIER,KM,COMMENTAIRE`];
+  es.forEach(e=>{
+    const d=new Date(e.date+'T12:00:00'), wd=d.getDay();
+    lines.push([e.date,JOURS_FR[wd],e.p1d||'',e.p1f||'',e.p2d||'',e.p2f||'',e.p3d||'',e.p3f||'',
+      e.h.toFixed(2),e.code||'',(e.chantier||'').replace(/[,\n\r]/g,' '),e.km||0,
+      (e.cmt||'').replace(/[,\n\r]/g,' ')].join(','));
   });
-
-  lines.push('',
-    `## RECAP_TOTAL:${tot.toFixed(2)}`,
-    `## RECAP_SAMEDIS:${sat.toFixed(2)}`,
-    `## RECAP_VACANCES:${vac}`,
-    `## RECAP_MALADIE:${mal}`,
-    `## RECAP_ACCIDENT:${acc}`
-  );
-
-  const empSlug = user.replace(/\s+/g,'_').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const moisSlug = MOIS_FR[m].normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  return {
-    csv: '\uFEFF' + lines.join('\r\n'),
-    fname: `MH_Import_${empSlug}_${moisSlug}_${y}.csv`,
-    total: tot, count: es.length
-  };
+  const tot=es.reduce((s,e)=>s+e.h,0);
+  lines.push('',`## RECAP_TOTAL:${tot.toFixed(2)}`);
+  const empSlug=user.replace(/\s+/g,'_').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const moisSlug=MOIS_FR[m].normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return {csv:'\uFEFF'+lines.join('\r\n'), fname:`MH_Import_${empSlug}_${moisSlug}_${y}.csv`};
 }
-
 async function downloadMonthCSV(yearMonth) {
-  const es = getEntries(user).filter(e => e.date.startsWith(yearMonth));
-  if (!es.length) { showToast(t('noDataMonth'), 'error'); return; }
-
-  const {csv, fname} = buildMonthCSV(yearMonth);
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const file = new File([blob], fname, {type:'text/csv'});
-
-  if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-    try { await navigator.share({files:[file], title:fname}); showToast(t('sharedOk'),'success'); return; }
-    catch(e) { if (e.name!=='AbortError') console.warn(e); }
+  const {csv,fname}=await buildMonthCSV(yearMonth);
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const file=new File([blob],fname,{type:'text/csv'});
+  if (navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})) {
+    try { await navigator.share({files:[file],title:fname}); showToast(t('sharedOk'),'success'); return; }
+    catch(e) { if(e.name!=='AbortError') console.warn(e); }
   }
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), {href:url, download:fname});
-  a.click(); URL.revokeObjectURL(url);
-  showToast(t('downloaded'), 'success');
+  const url=URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'),{href:url,download:fname}).click();
+  URL.revokeObjectURL(url);
+  showToast(t('downloaded'),'success');
 }
-
 async function exportAll() {
-  const entries = getEntries(user);
+  const entries=await window.DB.getEntries(user);
   if (!entries.length) { showToast(t('noData'),'error'); return; }
-  const months = [...new Set(entries.map(e=>e.date.slice(0,7)))];
-  let count = 0;
-  for (const ym of months) {
-    await new Promise(res => setTimeout(res, 400)); // stagger downloads
-    await downloadMonthCSV(ym);
-    count++;
-  }
-  showToast(`${t('exportAllDone')} (${count})`, 'success');
+  const months=[...new Set(entries.map(e=>e.date.slice(0,7)))];
+  for (const ym of months) { await new Promise(r=>setTimeout(r,400)); await downloadMonthCSV(ym); }
+  showToast(t('exportAllDone'),'success');
 }
-
-function clearAllData() {
+async function clearAllData() {
   if (!confirm(t('confirmDelAll'))) return;
-  saveEntries(user, []);
+  const entries=await window.DB.getEntries(user);
+  for (const e of entries) await window.DB.deleteEntry(user,e.date);
   renderHist(); renderMonthCsvList(); refreshStats();
-  showToast(t('dataCleared'), '');
+  showToast(t('dataCleared'),'');
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  UTILS
+// UTILS
 // ══════════════════════════════════════════════════════════════════
-const S   = n => String(n).padStart(2,'0');
-const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const S=n=>String(n).padStart(2,'0');
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 let toastT;
-function showToast(msg, type) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'toast show' + (type?' '+type:'');
-  clearTimeout(toastT); toastT = setTimeout(()=>{el.className='toast';}, 3000);
+function showToast(msg,type) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show'+(type?' '+type:'');
+  clearTimeout(toastT); toastT=setTimeout(()=>{el.className='toast';},3000);
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  INIT
+// INIT
 // ══════════════════════════════════════════════════════════════════
-setLang(lang, false); // Apply saved lang on load
+window.addEventListener('firebase-ready', () => {
+  updateSyncUI();
+  if (!window.FIREBASE_READY) {
+    document.getElementById('fb-banner').classList.add('show');
+  }
+});
+// Fallback if firebase-ready fires before listener
+setTimeout(() => {
+  if (typeof window.FIREBASE_READY !== 'undefined') updateSyncUI();
+  if (window.FIREBASE_READY === false) document.getElementById('fb-banner').classList.add('show');
+}, 1000);
+
+setLang(lang, false);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 </body>
