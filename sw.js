@@ -1,4 +1,4 @@
-const CACHE = "mh-heures-v17";
+const CACHE = "mh-heures-v18";
 const ASSETS = ["./index.html","./manifest.json","./icon-192.svg","./icon-512.svg"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

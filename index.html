@@ -1078,7 +1078,7 @@ textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(44,127,176,.1)
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
             <span data-i18n="pointNow">Pointer maintenant</span>
           </button>
-          <button class="btn btn-outline btn-sm" onclick="clearT()" data-i18n="clear">Effacer</button>
+          <button class="btn btn-outline btn-sm" onclick="clearAll_T()" data-i18n="clear">Effacer</button>
         </div>
       </div>
       <div class="card">
@@ -1576,6 +1576,8 @@ async function loginOK() {
   document.getElementById('header-name').textContent=user;
   const n=new Date();
   document.getElementById('date-input').value=`${n.getFullYear()}-${S(n.getMonth()+1)}-${S(n.getDate())}`;
+  // Pré-remplir les heures par défaut (horaire standard entreprise)
+  setDefaultHours();
   initSigMonthSel();
   updateSyncUI();
   // Request notification permission
@@ -1599,7 +1601,7 @@ function logout() {
   document.getElementById('screen-pin').style.display='flex';
   document.getElementById('lang-bar').style.display='flex';
   buf=''; updateDots(); document.getElementById('pin-error').textContent='';
-  clearT();
+  setDefaultHours();
   ['cmt','chantier','km'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
   document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
@@ -1657,9 +1659,26 @@ function pointerNow() {
   for (const id of ids) { if (!document.getElementById(id).value) { document.getElementById(id).value=v; calc(); showToast(t('saveOk'),'success'); return; } }
 }
 function clearT() {
+  // Reset to default company hours (not blank)
+  setDefaultHours();
+}
+function clearAll_T() {
+  // Full clear (all blank)
   ['p1d','p1f','p2d','p2f','p3d','p3f'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('result-h').textContent='0.00';
 }
+function setDefaultHours() {
+  // Horaire standard MH Maler & Gipser AG
+  // P1: 07:15 → 09:00 | P2: 09:15 → 11:45 | P3: 13:00 → 17:00 = 8.25h
+  document.getElementById('p1d').value = '07:15';
+  document.getElementById('p1f').value = '09:00';
+  document.getElementById('p2d').value = '09:15';
+  document.getElementById('p2f').value = '11:45';
+  document.getElementById('p3d').value = '13:00';
+  document.getElementById('p3f').value = '17:00';
+  calc();
+}
+
 async function save() {
   const date=document.getElementById('date-input').value;
   if (!date) { showToast(t('noDate'),'error'); return; }
@@ -1682,10 +1701,14 @@ async function save() {
   await window.DB.saveEntry(user, entry);
   btn.innerHTML = `<span data-i18n="saveBtn">${t('saveBtn')}</span>`;
   btn.disabled = false;
-  clearT();
+  setDefaultHours();
   ['cmt','chantier','km'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.code-chip').forEach(c=>c.classList.remove('active'));
   document.querySelector('.code-chip[data-code=""]').classList.add('active'); code='';
+  // Avancer la date au jour suivant automatiquement
+  const curDate = new Date(document.getElementById('date-input').value + 'T12:00:00');
+  curDate.setDate(curDate.getDate() + 1);
+  document.getElementById('date-input').value = `${curDate.getFullYear()}-${S(curDate.getMonth()+1)}-${S(curDate.getDate())}`;
   showToast(t('saveOk'),'success');
 }
 
