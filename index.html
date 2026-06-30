@@ -2039,12 +2039,16 @@ async function buildMonthCSV(yearMonth) {
   const es=entries.filter(e=>e.date.startsWith(yearMonth));
   const lines=[`## MH_IMPORT_V2`,`## EMPLOYE:${user}`,`## MOIS:${MOIS_FR[m]}`,
     `## ANNEE:${y}`,`## PERIODE:${yearMonth}`,`## EXPORTE:${new Date().toISOString().slice(0,10)}`,
-    ``,`DATE_ISO,JOUR,DEB1,FIN1,DEB2,FIN2,DEB3,FIN3,HEURES,CODE,CHANTIER,KM,COMMENTAIRE`];
+    ``,`DATE_ISO,JOUR,DEB1,FIN1,DEB2,FIN2,DEB3,FIN3,HEURES,CODE,CHANTIER,KM,COMMENTAIRE,CHANTIERS`];
   es.forEach(e=>{
     const d=new Date(e.date+'T12:00:00'), wd=d.getDay();
+    // JSON complet des chantiers multiples (si présents) — entre guillemets pour échapper les virgules
+    const chantiersJson = (e.chantiers && e.chantiers.length)
+      ? '"' + JSON.stringify(e.chantiers).replace(/"/g,'""') + '"'
+      : '';
     lines.push([e.date,JOURS_FR[wd],e.p1d||'',e.p1f||'',e.p2d||'',e.p2f||'',e.p3d||'',e.p3f||'',
       e.h.toFixed(2),e.code||'',(e.chantier||'').replace(/[,\n\r]/g,' '),e.km||0,
-      (e.cmt||'').replace(/[,\n\r]/g,' ')].join(','));
+      (e.cmt||'').replace(/[,\n\r]/g,' '), chantiersJson].join(','));
   });
   const tot=es.reduce((s,e)=>s+e.h,0);
   lines.push('',`## RECAP_TOTAL:${tot.toFixed(2)}`);
